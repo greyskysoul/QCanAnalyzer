@@ -230,6 +230,22 @@ bool PcanAdapter::isOpen() const
     return m_opened;
 }
 
+bool PcanAdapter::isAlive() const
+{
+    if (!m_opened || !m_GetStatus) return false;
+
+    uint32_t status = m_GetStatus(m_channel);
+    // 如果返回 ILLHANDLE 或 NODRIVER 说明设备已物理断开
+    if (status == PCAN_ERROR_ILLHANDLE ||
+        status == PCAN_ERROR_NODRIVER ||
+        status == PCAN_ERROR_ILLHW ||
+        status == PCAN_ERROR_RESOURCE)
+        return false;
+
+    // 总线错误不影响存活判断
+    return true;
+}
+
 // ─── 发送 ─────────────────────────────────────────────────────
 
 bool PcanAdapter::sendMessage(const CanMessage &msg)

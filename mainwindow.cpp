@@ -6,6 +6,8 @@
 
 #include <DockManager.h>
 #include <DockWidget.h>
+#include <DockAreaWidget.h>
+#include <DockContainerWidget.h>
 
 #include <QMenuBar>
 #include <QStatusBar>
@@ -15,6 +17,8 @@
 #include <QStackedWidget>
 #include <QApplication>
 #include <QScreen>
+#include <QPixmap>
+#include <QSplitter>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -116,6 +120,7 @@ void MainWindow::hideWelcomePage()
 
 void MainWindow::setupMenuBar()
 {
+    // ── 文件 ──
     QMenu *fileMenu = menuBar()->addMenu("文件(&F)");
 
     QAction *newSessionAct = new QAction("新建会话(&N)", this);
@@ -134,13 +139,64 @@ void MainWindow::setupMenuBar()
     connect(exitAct, &QAction::triggered, this, &QMainWindow::close);
     fileMenu->addAction(exitAct);
 
+    // ── 窗口 ──
+    QMenu *windowMenu = menuBar()->addMenu("窗口(&W)");
+
+    QAction *tileHAct = new QAction("水平平铺", this);
+    connect(tileHAct, &QAction::triggered, this, [this]() {
+        auto *splitter = m_dockManager->findChild<QSplitter*>();
+        if (splitter) {
+            splitter->setOrientation(Qt::Horizontal);
+            QList<int> sizes;
+            int total = splitter->width();
+            for (int i = 0; i < splitter->count(); ++i)
+                sizes << total / splitter->count();
+            splitter->setSizes(sizes);
+        }
+    });
+    windowMenu->addAction(tileHAct);
+
+    QAction *tileVAct = new QAction("垂直平铺", this);
+    connect(tileVAct, &QAction::triggered, this, [this]() {
+        auto *splitter = m_dockManager->findChild<QSplitter*>();
+        if (splitter) {
+            splitter->setOrientation(Qt::Vertical);
+            QList<int> sizes;
+            int total = splitter->height();
+            for (int i = 0; i < splitter->count(); ++i)
+                sizes << total / splitter->count();
+            splitter->setSizes(sizes);
+        }
+    });
+    windowMenu->addAction(tileVAct);
+
+    windowMenu->addSeparator();
+
+    QAction *unsplitAct = new QAction("取消拆分", this);
+    connect(unsplitAct, &QAction::triggered, this, [this]() {
+        QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
+        if (areas.size() < 2) return;
+        ads::CDockAreaWidget *first = areas.first();
+        for (int i = 1; i < areas.size(); ++i) {
+            auto docks = areas[i]->dockWidgets();
+            for (auto *dw : docks) {
+                m_dockManager->addDockWidgetTabToArea(dw, first);
+            }
+        }
+    });
+    windowMenu->addAction(unsplitAct);
+
+    // ── 帮助 ──
     QMenu *helpMenu = menuBar()->addMenu("帮助(&H)");
     QAction *aboutAct = new QAction("关于(&A)", this);
     connect(aboutAct, &QAction::triggered, this, [this]() {
-        QMessageBox::about(this, "关于 QCanAnalyzer",
-            "<h3>QCanAnalyzer v1.0</h3>"
+        QMessageBox about(this);
+        about.setWindowTitle("关于 QCanAnalyzer");
+        about.setIconPixmap(QPixmap(":/icon.png").scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        about.setText("<h3>QCanAnalyzer v1.0</h3>"
             "<p>基于 Qt 的 CAN 总线调试分析工具</p>"
             "<p>支持 PCAN 设备  |  多会话同时工作</p>");
+        about.exec();
     });
     helpMenu->addAction(aboutAct);
 }
@@ -156,20 +212,20 @@ void MainWindow::setupStatusBar()
 
 void MainWindow::onNewSession()
 {
-    // 弹出配置对话框
     SessionConfigDialog dlg(this);
     int channel = 0;
     CanBaudRate baud = CanBaudRate::BR_500K;
     bool isCanFd = false;
+    CanBaudRate dataBaud = CanBaudRate::BR_1M;
+    int adapterType = 0;
 
-    if (!dlg.configure(channel, baud, isCanFd))
-        return; // 用户取消
+    if (!dlg.configure(channel, baud, isCanFd, dataBaud, adapterType))
+        return;
 
-    // 首次创建会话时隐藏欢迎页
     if (!m_canManager->hasSessions())
         hideWelcomePage();
 
-    m_canManager->createSession(channel, baud, isCanFd);
+    m_canManager->createSession(channel, baud, isCanFd, adapterType);
     statusBar()->showMessage(
         QString("已创建会话 — 当前共 %1 个会话").arg(m_canManager->sessionCount()), 3000);
 }

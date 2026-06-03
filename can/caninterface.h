@@ -11,6 +11,14 @@ struct CanDeviceInfo {
     QString name;        // 显示名称
     QString description; // 详细描述
     int channel = -1;    // 通道号
+    int adapterType = 0; // 适配器类型: 0=PCAN, 1=gs_usb, 2=SocketCAN
+};
+
+/// 适配器类型
+enum class CanAdapterType {
+    PCAN = 0,
+    GsUsb,
+    SocketCAN
 };
 
 /// 波特率预设
@@ -70,6 +78,9 @@ public:
 
     /// 适配器类型名称
     virtual QString adapterName() const = 0;
+
+    /// 检查当前连接是否存活 (true=正常, false=已断开)
+    virtual bool isAlive() const { return isOpen(); }
 
 signals:
     /// 收到 CAN 消息

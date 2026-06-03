@@ -13,8 +13,11 @@
 #include <QCheckBox>
 #include <QGroupBox>
 #include <QTimer>
+#include <QLayout>
 
 class PcanAdapter;
+class GsUsbAdapter;
+class SocketCanAdapter;
 
 /// 单个 CAN 会话面板 —— 作为可停靠的独立窗口
 class CanSessionWidget : public QWidget
@@ -28,7 +31,7 @@ public:
     int sessionId() const { return m_sessionId; }
 
     /// 连接设备
-    void connectDevice(int channel, CanBaudRate baud);
+    void connectDevice(int channel, CanBaudRate baud, int adapterType = 0);
 
     /// 断开设备
     void disconnectDevice();
@@ -39,29 +42,42 @@ public:
     /// 扫描可用设备
     void refreshDevices();
 
+signals:
+    /// 设备意外断开通知
+    void deviceDisconnected(int sessionId);
+
 private slots:
     void onConnectClicked();
     void onSendClicked();
     void onClearClicked();
+    void onSaveClicked();
     void onMessageReceived(const CanMessage &msg);
 
 private:
     void setupUi();
+    void linkSignals(CanInterface *iface);
     void addMessageToTable(const CanMessage &msg);
     void updateStats();
+    void updateChannelCheckboxes();
+    void onStatusCheck();
+    void updateUiState(bool connected);
 
     int m_sessionId;
 
     // ─── 连接区域 ───
-    QComboBox   *m_deviceCombo;
+    QLabel      *m_deviceLabel;
     QComboBox   *m_baudCombo;
     QPushButton *m_connectBtn;
-    QPushButton *m_refreshBtn;
     QLabel      *m_statusLabel;
+
+    // ─── 通道接收复选框容器 ───
+    QHBoxLayout *m_channelChkLayout;
+    QList<QCheckBox*> m_channelChks;
 
     // ─── 接收表格 ───
     QTableWidget *m_rxTable;
     QLabel       *m_rxCountLabel;
+    QPushButton  *m_saveBtn;
     QPushButton  *m_clearBtn;
     QCheckBox    *m_autoScrollChk;
 
@@ -78,11 +94,18 @@ private:
     // ─── CAN 接口 ───
     CanInterface *m_can = nullptr;
     PcanAdapter  *m_pcan = nullptr;
+    GsUsbAdapter *m_gsusb = nullptr;
+    SocketCanAdapter *m_socketcan = nullptr;
+    int          m_currentChannel = 0;
+    int          m_adapterType = 0;
+
+    // ─── 状态监控定时器 ───
+    QTimer       *m_statusTimer = nullptr;
 
     // ─── 统计 ───
     int m_rxCount = 0;
     int m_txCount = 0;
-    int m_maxTableRows = 5000; // 表格最大行数限制
+    int m_maxTableRows = 5000;
 };
 
 #endif // CANSESSIONWIDGET_H

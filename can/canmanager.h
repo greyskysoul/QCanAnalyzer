@@ -22,7 +22,7 @@ public:
 
     /// 创建新会话 (带配置参数)
     CanSessionWidget *createSession(int channel, CanBaudRate baud,
-                                    bool isCanFd = false);
+                                    bool isCanFd = false, int adapterType = 0);
 
     /// 关闭指定会话
     void closeSession(int sessionId);

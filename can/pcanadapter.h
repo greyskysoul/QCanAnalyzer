@@ -124,6 +124,7 @@ public:
     void close() override;
     bool isOpen() const override;
     bool sendMessage(const CanMessage &msg) override;
+    bool isAlive() const override;
     QString adapterName() const override { return "PCAN"; }
 
     /// 设置读取超时 (ms)

@@ -1,14 +1,18 @@
 #include "cansessionwidget.h"
 #include "can/pcanadapter.h"
+#include "can/gsusbadapter.h"
+#include "can/socketcanadapter.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QSplitter>
 #include <QHeaderView>
 #include <QScrollBar>
-#include <QMessageBox>
 #include <QApplication>
 #include <QScreen>
+#include <QFileDialog>
+#include <QTextStream>
+#include <QDateTime>
 
 CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
     : QWidget(parent)
@@ -16,23 +20,28 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
 {
     setupUi();
 
-    // 创建 PCAN 适配器
+    // 默认创建 PCAN（可按需切换）
     m_pcan = new PcanAdapter(this);
     m_can = m_pcan;
 
     connect(m_pcan, &CanInterface::messageReceived,
             this, &CanSessionWidget::onMessageReceived);
     connect(m_pcan, &CanInterface::errorOccurred, this, [this](const QString &err) {
-        m_statusLabel->setText("⚠ " + err);
+        // Label 显示截断文本，完整文本放入 tooltip
+        QString shortErr = err;
+        if (shortErr.length() > 50)
+            shortErr = shortErr.left(47) + "...";
+        m_statusLabel->setText("⚠ " + shortErr);
+        m_statusLabel->setToolTip(err);  // 鼠标悬停看完整错误
         m_statusLabel->setStyleSheet("color:orange; font-weight:bold;");
     });
 
-    // 定时发送
     m_periodicTimer = new QTimer(this);
     connect(m_periodicTimer, &QTimer::timeout, this, &CanSessionWidget::onSendClicked);
 
-    // 初始扫描
-    refreshDevices();
+    // 设备状态监控 (每500ms检查一次)
+    m_statusTimer = new QTimer(this);
+    connect(m_statusTimer, &QTimer::timeout, this, &CanSessionWidget::onStatusCheck);
 
     setWindowTitle(QString("CAN Session %1").arg(sessionId));
 }
@@ -42,10 +51,40 @@ CanSessionWidget::~CanSessionWidget()
     disconnectDevice();
 }
 
+void CanSessionWidget::linkSignals(CanInterface *iface)
+{
+    connect(iface, &CanInterface::messageReceived,
+            this, &CanSessionWidget::onMessageReceived);
+    connect(iface, &CanInterface::errorOccurred, this, [this](const QString &err) {
+        QString shortErr = err;
+        if (shortErr.length() > 50)
+            shortErr = shortErr.left(47) + "...";
+        m_statusLabel->setText("⚠ " + shortErr);
+        m_statusLabel->setToolTip(err);
+        m_statusLabel->setStyleSheet("color:orange; font-weight:bold;");
+    });
+    disconnectDevice();
+}
+
 void CanSessionWidget::setupUi()
 {
-    // DPI 缩放系数
     qreal scale = QApplication::primaryScreen()->devicePixelRatio();
+
+    // ─── 统一样式表 ───
+    const QString btnStyle = QString(
+        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; }");
+    const QString greenBtn = btnStyle +
+        "QPushButton { background-color: #4CAF50; color: white; }"
+        "QPushButton:hover { background-color: #45a049; }";
+    const QString redBtn = btnStyle +
+        "QPushButton { background-color: #f44336; color: white; }"
+        "QPushButton:hover { background-color: #d32f2f; }";
+    const QString blueBtn = btnStyle +
+        "QPushButton { background-color: #2196F3; color: white; }"
+        "QPushButton:hover { background-color: #0b7dda; }";
+    const QString grayBtn = btnStyle +
+        "QPushButton { background-color: #607d8b; color: white; }"
+        "QPushButton:hover { background-color: #455a64; }";
 
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(4, 4, 4, 4);
@@ -55,40 +94,44 @@ void CanSessionWidget::setupUi()
     auto *connLayout = new QHBoxLayout();
     connLayout->setSpacing(6);
 
-    auto *devLabel = new QLabel("设备:");
-    m_deviceCombo = new QComboBox();
-    m_deviceCombo->setMinimumWidth(qRound(150 * scale));
+    connLayout->addWidget(new QLabel("设备:"));
+    m_deviceLabel = new QLabel("—");
+    m_deviceLabel->setStyleSheet("font-weight:bold; color:#2c3e50;");
+    m_deviceLabel->setMinimumWidth(qRound(120 * scale));
 
-    m_refreshBtn = new QPushButton("刷新");
-    m_refreshBtn->setFixedWidth(qRound(50 * scale));
-    connect(m_refreshBtn, &QPushButton::clicked, this, &CanSessionWidget::refreshDevices);
-
-    auto *baudLabel = new QLabel("波特率:");
+    connLayout->addWidget(m_deviceLabel);
+    connLayout->addWidget(new QLabel("波特率:"));
     m_baudCombo = new QComboBox();
     m_baudCombo->addItems({"1M", "800K", "500K", "250K", "125K", "100K", "50K", "20K", "10K", "5K"});
     m_baudCombo->setCurrentText("500K");
 
     m_connectBtn = new QPushButton("连接");
     m_connectBtn->setFixedWidth(qRound(70 * scale));
-    m_connectBtn->setStyleSheet(
-        "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; "
-        "border-radius: 3px; padding: 4px 12px; }"
-        "QPushButton:hover { background-color: #45a049; }");
+    m_connectBtn->setStyleSheet(greenBtn);
     connect(m_connectBtn, &QPushButton::clicked, this, &CanSessionWidget::onConnectClicked);
 
     m_statusLabel = new QLabel("未连接");
     m_statusLabel->setStyleSheet("color:gray; font-weight:bold;");
+    m_statusLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_statusLabel->setWordWrap(false);
+    m_statusLabel->setMinimumWidth(qRound(120 * scale));
 
-    connLayout->addWidget(devLabel);
-    connLayout->addWidget(m_deviceCombo);
-    connLayout->addWidget(m_refreshBtn);
-    connLayout->addWidget(baudLabel);
     connLayout->addWidget(m_baudCombo);
     connLayout->addWidget(m_connectBtn);
-    connLayout->addWidget(m_statusLabel);
+    connLayout->addWidget(m_statusLabel, 1);
     connLayout->addStretch();
 
     mainLayout->addLayout(connLayout);
+
+    // ─── 通道接收复选框 ───
+    auto *chRow = new QHBoxLayout();
+    chRow->setSpacing(8);
+    chRow->addWidget(new QLabel("接收通道:"));
+    m_channelChkLayout = new QHBoxLayout();
+    m_channelChkLayout->setSpacing(6);
+    chRow->addLayout(m_channelChkLayout);
+    chRow->addStretch();
+    mainLayout->addLayout(chRow);
 
     // ─── 分割器 (接收表 / 发送区) ───
     auto *splitter = new QSplitter(Qt::Vertical, this);
@@ -99,12 +142,6 @@ void CanSessionWidget::setupUi()
 
     m_rxTable = new QTableWidget(0, 6, this);
     m_rxTable->setHorizontalHeaderLabels({"时间", "ID", "类型", "DLC", "数据", "方向"});
-    // 列 0 时间:   固定 ~130px (DPI自适应)
-    // 列 1 ID:     固定 ~90px
-    // 列 2 类型:   固定 ~55px
-    // 列 3 DLC:    固定 ~45px
-    // 列 4 数据:   Stretch (自动填充剩余)
-    // 列 5 方向:   固定 ~50px
     m_rxTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     m_rxTable->horizontalHeader()->resizeSection(0, qRound(130 * scale));
     m_rxTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
@@ -121,26 +158,31 @@ void CanSessionWidget::setupUi()
     m_rxTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_rxTable->setAlternatingRowColors(true);
     m_rxTable->verticalHeader()->setVisible(false);
-    // 行高适应字体
-    m_rxTable->verticalHeader()->setDefaultSectionSize(
-        qRound(24 * scale));
+    m_rxTable->verticalHeader()->setDefaultSectionSize(qRound(24 * scale));
 
     auto *rxStatusLayout = new QHBoxLayout();
     m_rxCountLabel = new QLabel("Rx: 0");
     m_autoScrollChk = new QCheckBox("自动滚动");
     m_autoScrollChk->setChecked(true);
+
+    m_saveBtn = new QPushButton("保存");
+    m_saveBtn->setFixedWidth(qRound(55 * scale));
+    m_saveBtn->setStyleSheet(grayBtn);
+    connect(m_saveBtn, &QPushButton::clicked, this, &CanSessionWidget::onSaveClicked);
+
     m_clearBtn = new QPushButton("清除");
-    m_clearBtn->setFixedWidth(qRound(60 * scale));
+    m_clearBtn->setFixedWidth(qRound(55 * scale));
+    m_clearBtn->setStyleSheet(grayBtn);
     connect(m_clearBtn, &QPushButton::clicked, this, &CanSessionWidget::onClearClicked);
 
     rxStatusLayout->addWidget(m_rxCountLabel);
     rxStatusLayout->addStretch();
     rxStatusLayout->addWidget(m_autoScrollChk);
+    rxStatusLayout->addWidget(m_saveBtn);
     rxStatusLayout->addWidget(m_clearBtn);
 
     rxLayout->addWidget(m_rxTable);
     rxLayout->addLayout(rxStatusLayout);
-
     splitter->addWidget(rxGroup);
 
     // ── 发送面板 ──
@@ -176,7 +218,6 @@ void CanSessionWidget::setupUi()
     txLayout->addLayout(txFormLayout);
 
     auto *txBtnLayout = new QHBoxLayout();
-
     m_periodicSendChk = new QCheckBox("周期发送");
     m_sendPeriodSpin = new QSpinBox();
     m_sendPeriodSpin->setRange(10, 10000);
@@ -186,11 +227,10 @@ void CanSessionWidget::setupUi()
 
     connect(m_periodicSendChk, &QCheckBox::toggled, this, [this](bool checked) {
         m_sendPeriodSpin->setEnabled(checked);
-        if (checked && m_can->isOpen()) {
+        if (checked && m_can->isOpen())
             m_periodicTimer->start(m_sendPeriodSpin->value());
-        } else {
+        else
             m_periodicTimer->stop();
-        }
     });
     connect(m_sendPeriodSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
         if (m_periodicTimer->isActive())
@@ -199,10 +239,7 @@ void CanSessionWidget::setupUi()
 
     m_sendBtn = new QPushButton("发送");
     m_sendBtn->setFixedWidth(qRound(80 * scale));
-    m_sendBtn->setStyleSheet(
-        "QPushButton { background-color: #2196F3; color: white; font-weight: bold; "
-        "border-radius: 3px; padding: 4px 12px; }"
-        "QPushButton:hover { background-color: #0b7dda; }");
+    m_sendBtn->setStyleSheet(blueBtn);
     connect(m_sendBtn, &QPushButton::clicked, this, &CanSessionWidget::onSendClicked);
 
     txBtnLayout->addWidget(m_periodicSendChk);
@@ -218,25 +255,56 @@ void CanSessionWidget::setupUi()
     mainLayout->addWidget(splitter);
 }
 
-// ─── 连接 / 断开 ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// 连接 / 断开
+// ═══════════════════════════════════════════════════════════════
 
-void CanSessionWidget::connectDevice(int channel, CanBaudRate baud)
+void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterType)
 {
     if (m_can->isOpen())
         disconnectDevice();
 
-    if (m_can->open(channel, baud)) {
-        m_statusLabel->setText("● 已连接");
-        m_statusLabel->setStyleSheet("color:green; font-weight:bold;");
-        m_connectBtn->setText("断开");
-        m_connectBtn->setStyleSheet(
-            "QPushButton { background-color: #f44336; color: white; font-weight: bold; "
-            "border-radius: 3px; padding: 4px 12px; }"
-            "QPushButton:hover { background-color: #d32f2f; }");
-        m_deviceCombo->setEnabled(false);
-        m_baudCombo->setEnabled(false);
+    CanInterface *newCan = nullptr;
 
-        // 周期发送
+    switch (static_cast<CanAdapterType>(adapterType)) {
+    case CanAdapterType::PCAN:
+        if (!m_pcan) { m_pcan = new PcanAdapter(this); linkSignals(m_pcan); }
+        newCan = m_pcan;
+        break;
+    case CanAdapterType::GsUsb:
+        if (!m_gsusb) { m_gsusb = new GsUsbAdapter(this); linkSignals(m_gsusb); }
+        newCan = m_gsusb;
+        break;
+    case CanAdapterType::SocketCAN:
+        if (!m_socketcan) { m_socketcan = new SocketCanAdapter(this); linkSignals(m_socketcan); }
+        newCan = m_socketcan;
+        break;
+    default:
+        if (!m_pcan) { m_pcan = new PcanAdapter(this); linkSignals(m_pcan); }
+        newCan = m_pcan;
+        break;
+    }
+
+    m_can = newCan;
+    m_adapterType = adapterType;
+
+#ifdef Q_OS_LINUX
+    if (adapterType == static_cast<int>(CanAdapterType::SocketCAN)) {
+        m_deviceLabel->setText("SocketCAN (请用 ip link 命令设置波特率)");
+    } else {
+        m_deviceLabel->setText(newCan->adapterName());
+    }
+#else
+    m_deviceLabel->setText(newCan->adapterName());
+#endif
+
+    m_currentChannel = channel;
+
+    if (m_can->open(channel, baud)) {
+        updateUiState(true);
+        updateChannelCheckboxes();
+        m_statusTimer->start(500);
+
         if (m_periodicSendChk->isChecked())
             m_periodicTimer->start(m_sendPeriodSpin->value());
     }
@@ -244,17 +312,10 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud)
 
 void CanSessionWidget::disconnectDevice()
 {
+    m_statusTimer->stop();
     m_periodicTimer->stop();
     m_can->close();
-    m_statusLabel->setText("未连接");
-    m_statusLabel->setStyleSheet("color:gray; font-weight:bold;");
-    m_connectBtn->setText("连接");
-    m_connectBtn->setStyleSheet(
-        "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; "
-        "border-radius: 3px; padding: 4px 12px; }"
-        "QPushButton:hover { background-color: #45a049; }");
-    m_deviceCombo->setEnabled(true);
-    m_baudCombo->setEnabled(true);
+    updateUiState(false);
 }
 
 bool CanSessionWidget::isConnected() const
@@ -264,55 +325,124 @@ bool CanSessionWidget::isConnected() const
 
 void CanSessionWidget::refreshDevices()
 {
-    QString current = m_deviceCombo->currentText();
-    m_deviceCombo->clear();
-
-    if (!m_pcan) return;
-    QList<CanDeviceInfo> devices = m_pcan->scanDevices();
-
-    if (devices.isEmpty()) {
-        m_deviceCombo->addItem("未检测到设备", -1);
-    } else {
-        for (const auto &dev : devices) {
-            m_deviceCombo->addItem(QString("%1  [通道 0x%2]")
-                .arg(dev.name)
-                .arg(dev.channel, 2, 16, QChar('0')), dev.channel);
-        }
-    }
-
-    // 尝试恢复之前的选择
-    int idx = m_deviceCombo->findText(current, Qt::MatchStartsWith);
-    if (idx >= 0) m_deviceCombo->setCurrentIndex(idx);
+    // 不再需要填充下拉列表，仅更新通道复选框
+    updateChannelCheckboxes();
 }
 
-// ─── 槽 ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// 状态监控
+// ═══════════════════════════════════════════════════════════════
+
+void CanSessionWidget::onStatusCheck()
+{
+    if (!m_can || !m_can->isOpen()) return;
+
+    // 用 isAlive() 检查连接，不重新扫描设备
+    if (!m_can->isAlive()) {
+        m_statusTimer->stop();
+        m_periodicTimer->stop();
+        m_can->close();
+        updateUiState(false);
+
+        m_statusLabel->setText("⚠ 设备已断开");
+        m_statusLabel->setStyleSheet("color:red; font-weight:bold;");
+        emit deviceDisconnected(m_sessionId);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI 状态切换 & 通道复选框
+// ═══════════════════════════════════════════════════════════════
+
+void CanSessionWidget::updateUiState(bool connected)
+{
+    const QString greenBtn = 
+        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; "
+        "background-color: #4CAF50; color: white; }"
+        "QPushButton:hover { background-color: #45a049; }";
+    const QString redBtn =
+        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; "
+        "background-color: #f44336; color: white; }"
+        "QPushButton:hover { background-color: #d32f2f; }";
+
+    if (connected) {
+        m_statusLabel->setText("● 已连接");
+        m_statusLabel->setToolTip("");
+        m_statusLabel->setStyleSheet("color:green; font-weight:bold;");
+        m_connectBtn->setText("断开");
+        m_connectBtn->setStyleSheet(redBtn);
+        m_baudCombo->setEnabled(false);
+    } else {
+        m_statusLabel->setText("未连接");
+        m_statusLabel->setToolTip("");
+        m_statusLabel->setStyleSheet("color:gray; font-weight:bold;");
+        m_connectBtn->setText("连接");
+        m_connectBtn->setStyleSheet(greenBtn);
+        m_baudCombo->setEnabled(true);
+
+        // 清除通道复选框
+        qDeleteAll(m_channelChks);
+        m_channelChks.clear();
+    }
+}
+
+void CanSessionWidget::updateChannelCheckboxes()
+{
+    qDeleteAll(m_channelChks);
+    m_channelChks.clear();
+
+    if (!m_pcan) return;
+
+    // 扫描设备获取通道列表
+    QList<CanDeviceInfo> devices = m_pcan->scanDevices();
+
+    // 如果没扫到设备但有当前通道号，至少显示当前通道
+    if (devices.isEmpty() && m_currentChannel > 0) {
+        auto *chk = new QCheckBox(QString("CH%1").arg(m_currentChannel & 0x0F));
+        chk->setChecked(true);
+        chk->setToolTip(QString("通道 0x%1").arg(m_currentChannel, 2, 16, QChar('0')));
+        m_channelChks.append(chk);
+        m_channelChkLayout->addWidget(chk);
+        return;
+    }
+
+    for (const auto &dev : devices) {
+        auto *chk = new QCheckBox(QString("CH%1").arg(dev.channel & 0x0F));
+        chk->setChecked(true);
+        chk->setToolTip(dev.name);
+        m_channelChks.append(chk);
+        m_channelChkLayout->addWidget(chk);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 槽
+// ═══════════════════════════════════════════════════════════════
 
 void CanSessionWidget::onConnectClicked()
 {
+    // 会话已经通过配置对话框连接，这里只负责断开/重连
     if (m_can->isOpen()) {
         disconnectDevice();
         return;
     }
 
-    int channel = m_deviceCombo->currentData().toInt();
-    if (channel <= 0) {
-        QMessageBox::warning(this, "提示", "请先选择可用设备");
-        return;
+    // 重新连接（使用上次参数）
+    if (m_currentChannel > 0) {
+        QString baudStr = m_baudCombo->currentText();
+        CanBaudRate baud = CanBaudRate::BR_500K;
+        if (baudStr == "1M")    baud = CanBaudRate::BR_1M;
+        else if (baudStr == "800K")  baud = CanBaudRate::BR_800K;
+        else if (baudStr == "250K")  baud = CanBaudRate::BR_250K;
+        else if (baudStr == "125K")  baud = CanBaudRate::BR_125K;
+        else if (baudStr == "100K")  baud = CanBaudRate::BR_100K;
+        else if (baudStr == "50K")   baud = CanBaudRate::BR_50K;
+        else if (baudStr == "20K")   baud = CanBaudRate::BR_20K;
+        else if (baudStr == "10K")   baud = CanBaudRate::BR_10K;
+        else if (baudStr == "5K")    baud = CanBaudRate::BR_5K;
+
+        connectDevice(m_currentChannel, baud);
     }
-
-    QString baudStr = m_baudCombo->currentText();
-    CanBaudRate baud = CanBaudRate::BR_500K;
-    if (baudStr == "1M")    baud = CanBaudRate::BR_1M;
-    else if (baudStr == "800K")  baud = CanBaudRate::BR_800K;
-    else if (baudStr == "250K")  baud = CanBaudRate::BR_250K;
-    else if (baudStr == "125K")  baud = CanBaudRate::BR_125K;
-    else if (baudStr == "100K")  baud = CanBaudRate::BR_100K;
-    else if (baudStr == "50K")   baud = CanBaudRate::BR_50K;
-    else if (baudStr == "20K")   baud = CanBaudRate::BR_20K;
-    else if (baudStr == "10K")   baud = CanBaudRate::BR_10K;
-    else if (baudStr == "5K")    baud = CanBaudRate::BR_5K;
-
-    connectDevice(channel, baud);
 }
 
 void CanSessionWidget::onSendClicked()
@@ -360,7 +490,51 @@ void CanSessionWidget::onClearClicked()
 {
     m_rxTable->setRowCount(0);
     m_rxCount = 0;
+    m_txCount = 0;
     updateStats();
+}
+
+void CanSessionWidget::onSaveClicked()
+{
+    if (m_rxTable->rowCount() == 0) return;
+
+    QString defaultName = QString("can_log_%1.csv")
+        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
+    QString filePath = QFileDialog::getSaveFileName(
+        this, "保存 CAN 报文", defaultName,
+        "CSV 文件 (*.csv);;所有文件 (*)");
+
+    if (filePath.isEmpty()) return;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) return;
+
+    QTextStream out(&file);
+    // BOM for Excel UTF-8
+    out.setCodec("UTF-8");
+    out << QChar(0xFEFF);
+
+    // 表头
+    out << "时间,ID,类型,DLC,数据,方向\n";
+
+    // 数据行
+    for (int row = 0; row < m_rxTable->rowCount(); ++row) {
+        for (int col = 0; col < m_rxTable->columnCount(); ++col) {
+            if (col > 0) out << ",";
+            auto *item = m_rxTable->item(row, col);
+            if (item) {
+                QString text = item->text();
+                // 数据列包含空格，需要引号包裹
+                if (col == 4 && !text.isEmpty())
+                    out << "\"" << text << "\"";
+                else
+                    out << text;
+            }
+        }
+        out << "\n";
+    }
+
+    file.close();
 }
 
 // ─── 接收消息 ─────────────────────────────────────────────────

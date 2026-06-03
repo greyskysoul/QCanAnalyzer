@@ -8,10 +8,24 @@ DEFINES += QT_DEPRECATED_WARNINGS
 DEFINES += ADS_STATIC
 
 # ═══════════════════════════════════════════════════════════════
+# 程序图标 (Windows 需 .ico 格式)
+# ═══════════════════════════════════════════════════════════════
+win32:RC_ICONS = icon.ico
+
+# ═══════════════════════════════════════════════════════════════
 # qt-advanced-docking-system (静态编译，无需预构建库)
 # ═══════════════════════════════════════════════════════════════
 ADS_ROOT = libs/Qt-Advanced-Docking-System
 INCLUDEPATH += $$ADS_ROOT/src
+
+# ═══════════════════════════════════════════════════════════════
+# candle API (gs_usb / candleLight 驱动)
+# ═══════════════════════════════════════════════════════════════
+INCLUDEPATH += can/CandleApiDriver/api
+
+SOURCES += \
+    can/CandleApiDriver/api/candle.c \
+    can/CandleApiDriver/api/candle_ctrl_req.c
 
 SOURCES += \
     $$ADS_ROOT/src/ads_globals.cpp \
@@ -62,7 +76,8 @@ HEADERS += \
     $$ADS_ROOT/src/PushButton.h \
     $$ADS_ROOT/src/ResizeHandle.h
 
-RESOURCES += $$ADS_ROOT/src/ads.qrc
+RESOURCES += $$ADS_ROOT/src/ads.qrc \
+    resources.qrc
 
 # ═══════════════════════════════════════════════════════════════
 # 源文件
@@ -72,6 +87,8 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     can/pcanadapter.cpp \
+    can/gsusbadapter.cpp \
+    can/socketcanadapter.cpp \
     can/canmanager.cpp \
     ui/cansessionwidget.cpp \
     ui/welcomewidget.cpp \
@@ -82,6 +99,8 @@ HEADERS += \
     can/canmessage.h \
     can/caninterface.h \
     can/pcanadapter.h \
+    can/gsusbadapter.h \
+    can/socketcanadapter.h \
     can/canmanager.h \
     ui/cansessionwidget.h \
     ui/welcomewidget.h \
@@ -96,6 +115,17 @@ TRANSLATIONS += \
 # ═══════════════════════════════════════════════════════════════
 # 部署规则
 # ═══════════════════════════════════════════════════════════════
+
+# Linux SocketCAN 需要 socket 库
+unix:!macx {
+    LIBS += -lxcb
+}
+
+# Windows candle API 需要 ole32 (CLSIDFromString) / winusb / setupapi / cfgmgr32
+win32 {
+    LIBS += -lwinusb -lsetupapi -lcfgmgr32 -lole32
+}
+# (socket 和 can 头文件已在 Linux 内核头文件中)
 
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin

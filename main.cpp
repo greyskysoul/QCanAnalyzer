@@ -2,10 +2,10 @@
 
 #include <QApplication>
 #include <QStyleFactory>
+#include <QIcon>
 
 int main(int argc, char *argv[])
 {
-    // ─── Qt 高 DPI 自适应（Qt 5.6+）───
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
 
     QApplication a(argc, argv);
 
-    // 设置为 Fusion 风格，在高DPI下一致性好
+    a.setWindowIcon(QIcon(":/icon.png"));
     a.setStyle(QStyleFactory::create("Fusion"));
 
     // 全局字体略大一号，保证可读性

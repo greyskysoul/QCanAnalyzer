@@ -1,0 +1,34 @@
+#ifndef GSUSBADAPTER_H
+#define GSUSBADAPTER_H
+
+#include "can/caninterface.h"
+
+/// gs_usb CAN 适配器 (candleLight / gs_usb 开源固件设备)
+/// 使用 candle API (来自 cangaroo 项目) 进行静态链接
+class GsUsbAdapter : public CanInterface
+{
+    Q_OBJECT
+
+public:
+    explicit GsUsbAdapter(QObject *parent = nullptr);
+    ~GsUsbAdapter() override;
+
+    QList<CanDeviceInfo> scanDevices() override;
+    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) override;
+    void close() override;
+    bool isOpen() const override;
+    bool sendMessage(const CanMessage &msg) override;
+    bool isAlive() const override;
+    QString adapterName() const override { return "gs_usb"; }
+
+    static QString channelName(int channel);
+
+private:
+    // candle API 使用不透明指针
+    void *m_devHandle = nullptr;  // candle_handle
+    void *m_devList = nullptr;    // candle_list_handle
+    int    m_channelCount = 0;
+    bool   m_opened = false;
+};
+
+#endif // GSUSBADAPTER_H

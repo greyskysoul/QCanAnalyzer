@@ -7,6 +7,7 @@
 #include <QStyle>
 #include <QScreen>
 #include <QWindow>
+#include <QPixmap>
 
 WelcomeWidget::WelcomeWidget(QWidget *parent)
     : QWidget(parent)
@@ -23,10 +24,11 @@ WelcomeWidget::WelcomeWidget(QWidget *parent)
     // ── 图标区域 ──
     {
         int iconSize = qMax(48, qRound(64 * devicePixel / 2));
-        auto *iconLabel = new QLabel("🔌");
+        auto *iconLabel = new QLabel();
         iconLabel->setAlignment(Qt::AlignCenter);
-        iconLabel->setStyleSheet(
-            QString("font-size: %1px; background: transparent;").arg(iconSize));
+        QPixmap icon(":/icon.png");
+        iconLabel->setPixmap(icon.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        iconLabel->setStyleSheet("background: transparent;");
         layout->addWidget(iconLabel);
     }
 
