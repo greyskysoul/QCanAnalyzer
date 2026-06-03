@@ -2,7 +2,6 @@
 #include <QDebug>
 #include <QTimer>
 #include <QDateTime>
-#include <QDir>
 
 // candle API 头文件
 extern "C" {
@@ -23,23 +22,7 @@ QList<CanDeviceInfo> GsUsbAdapter::scanDevices()
 {
     QList<CanDeviceInfo> devices;
 
-#ifdef Q_OS_LINUX
-    // Linux: 扫描 /dev/gs_usb*
-    QDir devDir("/dev");
-    QStringList filters;
-    filters << "gs_usb*";
-    for (const auto &entry : devDir.entryList(filters, QDir::System)) {
-        QString num = entry.mid(6);
-        int ch = num.isEmpty() ? 0 : num.toInt();
-        CanDeviceInfo info;
-        info.channel = ch;
-        info.adapterType = static_cast<int>(CanAdapterType::GsUsb);
-        info.name = QString("gs_usb%1").arg(ch);
-        info.description = info.name;
-        devices.append(info);
-    }
-#else
-    // Windows: 使用 candle API 扫描
+    // 使用 candle API 扫描
     candle_list_handle list = nullptr;
     if (!candle_list_scan(&list) || !list)
         return devices;
@@ -72,7 +55,6 @@ QList<CanDeviceInfo> GsUsbAdapter::scanDevices()
     }
 
     candle_list_free(list);
-#endif
 
     return devices;
 }
@@ -81,13 +63,7 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
 {
     if (m_opened) close();
 
-#ifdef Q_OS_LINUX
-    Q_UNUSED(baud);
-    m_opened = true;
-    return true;
-#endif
-
-    // Windows: candle API
+    // 使用 candle API 打开
     candle_list_handle list = nullptr;
     if (!candle_list_scan(&list) || !list) {
         emit errorOccurred("未找到 candleLight 设备");

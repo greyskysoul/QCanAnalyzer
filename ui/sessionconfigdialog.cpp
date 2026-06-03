@@ -33,10 +33,11 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
 
     // ── 适配器类型 ──
     m_adapterCombo = new QComboBox();
-    m_adapterCombo->addItem("PCAN", static_cast<int>(CanAdapterType::PCAN));
-    m_adapterCombo->addItem("gs_usb (candleLight)", static_cast<int>(CanAdapterType::GsUsb));
 #ifdef Q_OS_LINUX
     m_adapterCombo->addItem("SocketCAN", static_cast<int>(CanAdapterType::SocketCAN));
+#else
+    m_adapterCombo->addItem("PCAN", static_cast<int>(CanAdapterType::PCAN));
+    m_adapterCombo->addItem("gs_usb (candleLight)", static_cast<int>(CanAdapterType::GsUsb));
 #endif
     form->addRow("适配器:", m_adapterCombo);
 
