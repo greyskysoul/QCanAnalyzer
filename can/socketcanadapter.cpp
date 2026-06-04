@@ -11,6 +11,7 @@
 #include <net/if.h>
 #include <linux/can.h>
 #include <linux/can/raw.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
 #endif
@@ -47,7 +48,7 @@ void SocketCanAdapter::readSocket()
 
         CanMessage msg;
         msg.direction = CanDirection::Rx;
-        msg.channel = m_channel;
+        msg.channel = 0;
         msg.timestamp = QDateTime::currentDateTime();
 
         if (frame.can_id & CAN_EFF_FLAG) {
