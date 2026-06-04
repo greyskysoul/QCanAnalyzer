@@ -35,12 +35,6 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
     linkSignals(m_socketcan);
 #endif
 
-    m_periodicTimer = new QTimer(this);
-    connect(m_periodicTimer, &QTimer::timeout, this, [this]() {
-        // 周期触发：按帧数发送，通过 onSendClicked 的发送/停止机制
-        onSendClicked();
-    });
-
     m_frameTimer = new QTimer(this);
     m_frameTimer->setSingleShot(false);
     connect(m_frameTimer, &QTimer::timeout, this, &CanSessionWidget::onSendOneFrame);
@@ -56,7 +50,6 @@ CanSessionWidget::~CanSessionWidget()
     // 析构时直接清理资源，不调用 disconnectDevice()
     // 因为 disconnectDevice() 会访问 UI 控件，而此时 UI 可能已部分销毁
     m_statusTimer->stop();
-    m_periodicTimer->stop();
     m_frameTimer->stop();
     if (m_can) {
         m_can->close();
@@ -142,27 +135,17 @@ void CanSessionWidget::setupUi()
     ui->sendDataEdit->setFixedHeight(qRound(56 * scale));
     ui->sendDataEdit->setTabChangesFocus(true);
 
-    // 周期复选框：勾选时锁定周期 SpinBox，取消勾选后可修改
-    connect(ui->periodicSendChk, &QCheckBox::toggled, this, [this](bool checked) {
-        ui->sendPeriodSpin->setEnabled(!checked);
-        if (checked && m_can->isOpen())
-            m_periodicTimer->start(ui->sendPeriodSpin->value());
-        else
-            m_periodicTimer->stop();
-    });
-    ui->sendPeriodSpin->setRange(10, 10000);
-    ui->sendPeriodSpin->setValue(1000);
+    // 帧间隔 SpinBox：0 = 最快速，>0 = 每帧间隔 N ms
+    ui->sendPeriodSpin->setRange(0, 10000);
+    ui->sendPeriodSpin->setValue(0);
+    ui->sendPeriodSpin->setSpecialValueText("最快");
+    ui->sendPeriodSpin->setSuffix(" ms");
 
     // 帧数 SpinBox
     ui->sendFrameCountSpin->setMinimum(1);
     ui->sendFrameCountSpin->setMaximum(999999);
     ui->sendFrameCountSpin->setValue(1);
     ui->sendFrameCountSpin->setFixedWidth(qRound(70 * scale));
-
-    connect(ui->sendPeriodSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
-        if (m_periodicTimer->isActive())
-            m_periodicTimer->setInterval(val);
-    });
 
     ui->sendBtn->setFixedWidth(qRound(80 * scale));
     const QString blueBtn = btnStyle +
@@ -230,20 +213,22 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
 
     m_currentChannel = channel;
 
+    // 计算逻辑通道号（用于显示）：PCAN channel 是 16 位 handle，取低 4 位
+    if (adapterType == static_cast<int>(CanAdapterType::PCAN))
+        m_channelIndex = channel & 0x0F;
+    else
+        m_channelIndex = channel;
+
     if (m_can->open(channel, baud)) {
         updateUiState(true);
         updateChannelCheckboxes();
         m_statusTimer->start(500);
-
-        if (ui->periodicSendChk->isChecked())
-            m_periodicTimer->start(ui->sendPeriodSpin->value());
     }
 }
 
 void CanSessionWidget::disconnectDevice()
 {
     m_statusTimer->stop();
-    m_periodicTimer->stop();
     stopSending();  // 停止逐帧发送
     m_can->close();
     updateUiState(false);
@@ -269,7 +254,6 @@ void CanSessionWidget::onStatusCheck()
 
     if (!m_can->isAlive()) {
         m_statusTimer->stop();
-        m_periodicTimer->stop();
         stopSending();
         m_can->close();
         updateUiState(false);
@@ -370,7 +354,12 @@ void CanSessionWidget::onSendClicked()
         return;
     }
 
-    // ── 开始发送 ──
+    prepareAndStartSend();
+}
+
+void CanSessionWidget::prepareAndStartSend()
+{
+    if (!m_can->isOpen()) return;
 
     // 解析 16 进制数据（仅允许 0-9, A-F, a-f, 空格）
     QString dataStr = ui->sendDataEdit->toPlainText().trimmed();
@@ -390,6 +379,7 @@ void CanSessionWidget::onSendClicked()
 
     m_pendingMsg = CanMessage();
     m_pendingMsg.direction = CanDirection::Tx;
+    m_pendingMsg.channel = m_channelIndex;
 
     QString idText = ui->sendIdEdit->text().trimmed();
     bool ok = false;
@@ -420,11 +410,17 @@ void CanSessionWidget::onSendClicked()
     m_frameRemaining = ui->sendFrameCountSpin->value();
     m_sending = true;
 
-    // UI：按钮变"停止"
-    updateSendButtonState(true);
+    // 帧间隔：0 用 1ms 快速发送，>0 用指定间隔
+    int intervalMs = ui->sendPeriodSpin->value();
+    if (intervalMs <= 0) intervalMs = 1;
 
-    // 启动逐帧发送定时器（1ms 间隔，让事件循环可以响应停止）
-    m_frameTimer->start(1);
+    // 帧数 > 1 或帧间隔 > 1 时显示"停止"按钮（仅单帧最快发送不切换）
+    bool multiFrame = (m_frameRemaining > 1 || intervalMs > 1);
+    if (multiFrame) {
+        updateSendButtonState(true);
+    }
+
+    m_frameTimer->start(intervalMs);
 }
 
 void CanSessionWidget::onSendOneFrame()
@@ -451,9 +447,13 @@ void CanSessionWidget::onSendOneFrame()
 void CanSessionWidget::stopSending()
 {
     m_frameTimer->stop();
+    bool hadMultiFrame = (m_frameRemaining > 1 || ui->sendPeriodSpin->value() > 0);
     m_sending = false;
     m_frameRemaining = 0;
-    updateSendButtonState(false);
+    // 仅当之前更新过 UI 时才恢复
+    if (hadMultiFrame) {
+        updateSendButtonState(false);
+    }
 }
 
 void CanSessionWidget::updateSendButtonState(bool sending)
@@ -475,7 +475,7 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         ui->sendDlcSpin->setEnabled(false);
         ui->sendDataEdit->setEnabled(false);
         ui->sendFrameCountSpin->setEnabled(false);
-        ui->periodicSendChk->setEnabled(false);
+        ui->sendPeriodSpin->setEnabled(false);
     } else {
         const QString blueBtn = btnStyle +
             "QPushButton { background-color: #2196F3; color: white; }"
@@ -489,9 +489,7 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         ui->sendDlcSpin->setEnabled(true);
         ui->sendDataEdit->setEnabled(true);
         ui->sendFrameCountSpin->setEnabled(true);
-        ui->periodicSendChk->setEnabled(true);
-        // 同步周期状态
-        ui->sendPeriodSpin->setEnabled(!ui->periodicSendChk->isChecked());
+        ui->sendPeriodSpin->setEnabled(true);
     }
 }
 
@@ -571,7 +569,7 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
         idItem->setForeground(QColor("#E91E63"));
     ui->rxTable->setItem(row, ColId, idItem);
 
-    auto *chItem = new QTableWidgetItem(QString::number(msg.channel));
+    auto *chItem = new QTableWidgetItem(QString("CH%1").arg(msg.channel));
     chItem->setTextAlignment(Qt::AlignCenter);
     ui->rxTable->setItem(row, ColCh, chItem);
 

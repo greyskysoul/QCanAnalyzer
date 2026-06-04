@@ -79,6 +79,7 @@ private:
     void onStatusCheck();
     void updateUiState(bool connected);
     void stopSending();
+    void prepareAndStartSend();
     void updateSendButtonState(bool sending);
 
     Ui::CanSessionWidget *ui;
@@ -89,9 +90,8 @@ private:
     QList<QCheckBox*> m_channelChks;
 
     // ─── 定时器 ───
-    QTimer      *m_periodicTimer = nullptr;
     QTimer      *m_statusTimer = nullptr;
-    QTimer      *m_frameTimer = nullptr;   // 逐帧发送定时器
+    QTimer      *m_frameTimer = nullptr;   // 帧间隔发送定时器
 
     // ─── 发送状态 ───
     int          m_frameRemaining = 0;     // 剩余待发送帧数
@@ -104,6 +104,7 @@ private:
     GsUsbAdapter *m_gsusb = nullptr;
     SocketCanAdapter *m_socketcan = nullptr;
     int          m_currentChannel = 0;
+    int          m_channelIndex = 0;       // 逻辑通道号（用于显示）
     int          m_adapterType = 0;
 
     // ─── 统计 ───

@@ -238,8 +238,10 @@ void MainWindow::setupMenuBar()
         about.setWindowTitle("关于 QCanAnalyzer");
         about.setIconPixmap(QPixmap(":/icon.png").scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         about.setText("<h3>QCanAnalyzer v1.0</h3>"
-            "<p>基于 Qt 的 CAN 总线调试分析工具</p>"
-            "<p>支持 PCAN 设备  |  多会话同时工作</p>");
+            "<p>CAN 总线调试分析工具</p>"
+            "<p>PCAN &middot; gs_usb (candleLight) &middot; SocketCAN</p>"
+            "<p>CAN-FD 支持 &middot; 多通道识别 &middot; 帧间隔发送 &middot; 多会话停靠</p>"
+            "<p style='color:gray;'>AI 生成项目 — GitHub Copilot (DeepSeek V4 Pro)</p>");
         about.exec();
     });
     helpMenu->addAction(aboutAct);

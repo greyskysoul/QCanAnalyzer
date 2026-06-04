@@ -325,7 +325,7 @@ void GsUsbAdapter::onReadTimer()
             msg.id = candle_frame_id(&frame);
             msg.dlc = candle_frame_dlc(&frame);
             msg.direction = CanDirection::Rx;
-            msg.channel = m_channel;
+            msg.channel = m_channelIndex;
             msg.timestamp = QDateTime::currentDateTime();
             msg.type = candle_frame_is_extended_id(&frame)
                 ? CanFrameType::ExtendedData : CanFrameType::StandardData;

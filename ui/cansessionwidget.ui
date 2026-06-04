@@ -298,9 +298,9 @@
        <item>
         <layout class="QHBoxLayout" name="txBtnLayout">
          <item>
-          <widget class="QCheckBox" name="periodicSendChk">
+          <widget class="QLabel" name="sendPeriodLabel">
            <property name="text">
-            <string>周期发送</string>
+            <string>帧间隔:</string>
            </property>
           </widget>
          </item>
@@ -309,8 +309,17 @@
            <property name="suffix">
             <string> ms</string>
            </property>
-           <property name="enabled">
-            <bool>true</bool>
+           <property name="minimum">
+            <number>0</number>
+           </property>
+           <property name="maximum">
+            <number>10000</number>
+           </property>
+           <property name="value">
+            <number>0</number>
+           </property>
+           <property name="specialValueText">
+            <string>单次</string>
            </property>
           </widget>
          </item>

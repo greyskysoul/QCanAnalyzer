@@ -193,7 +193,7 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
                 canMsg.id = msg.ID;
                 canMsg.dlc = msg.LEN;
                 canMsg.direction = CanDirection::Rx;
-                canMsg.channel = m_channel;
+                canMsg.channel = m_channel & 0x0F;  // 逻辑通道号
                 canMsg.timestamp = QDateTime::currentDateTime(); // 使用本地时间
 
                 if (msg.MSGTYPE & PCAN_MESSAGE_EXTENDED)
