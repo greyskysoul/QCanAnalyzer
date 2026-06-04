@@ -1,4 +1,5 @@
 #include "sessionconfigdialog.h"
+#include "ui_sessionconfigdialog.h"
 #ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
@@ -6,8 +7,6 @@
 #include "can/socketcanadapter.h"
 #endif
 
-#include <QVBoxLayout>
-#include <QFormLayout>
 #include <QPushButton>
 #include <QMessageBox>
 #include <QApplication>
@@ -15,8 +14,9 @@
 
 SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     : QDialog(parent)
+    , ui(new Ui::SessionConfigDialog)
 {
-    setWindowTitle("新建 CAN 会话");
+    ui->setupUi(this);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     qreal dpr = QApplication::primaryScreen()->devicePixelRatio();
@@ -24,111 +24,77 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     int dlgH = qMax(300, qRound(380 * dpr / 2));
     setMinimumSize(dlgW, dlgH);
 
-    auto *layout = new QVBoxLayout(this);
-    layout->setSpacing(12);
-
-    auto *titleLabel = new QLabel("<b style='font-size:14px; color:#2c3e50;'>会话参数配置</b>");
-    layout->addWidget(titleLabel);
-
-    auto *form = new QFormLayout();
-    form->setSpacing(10);
-    form->setContentsMargins(10, 5, 10, 5);
-
     // ── 适配器类型 ──
-    m_adapterCombo = new QComboBox();
 #ifdef Q_OS_LINUX
-    m_adapterCombo->addItem("SocketCAN", static_cast<int>(CanAdapterType::SocketCAN));
+    ui->adapterCombo->addItem("SocketCAN", static_cast<int>(CanAdapterType::SocketCAN));
 #else
-    m_adapterCombo->addItem("PCAN", static_cast<int>(CanAdapterType::PCAN));
-    m_adapterCombo->addItem("gs_usb (candleLight)", static_cast<int>(CanAdapterType::GsUsb));
+    ui->adapterCombo->addItem("PCAN", static_cast<int>(CanAdapterType::PCAN));
+    ui->adapterCombo->addItem("gs_usb (candleLight)", static_cast<int>(CanAdapterType::GsUsb));
 #endif
-    form->addRow("适配器:", m_adapterCombo);
 
     // 切换适配器时自动刷新设备列表
-    connect(m_adapterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    connect(ui->adapterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SessionConfigDialog::scanDevices);
 
-    m_deviceCombo = new QComboBox();
-    m_deviceCombo->setMinimumWidth(200);
-
-    auto *refreshBtn = new QPushButton("刷新");
-    refreshBtn->setFixedWidth(55);
-    refreshBtn->setStyleSheet(
+    // 刷新按钮
+    ui->refreshBtn->setStyleSheet(
         "QPushButton { background-color: #607d8b; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 8px; }"
         "QPushButton:hover { background-color: #455a64; }");
-    connect(refreshBtn, &QPushButton::clicked, this, &SessionConfigDialog::scanDevices);
+    connect(ui->refreshBtn, &QPushButton::clicked, this, &SessionConfigDialog::scanDevices);
 
-    auto *deviceLayout = new QHBoxLayout();
-    deviceLayout->addWidget(m_deviceCombo);
-    deviceLayout->addWidget(refreshBtn);
-    form->addRow("CAN 设备:", deviceLayout);
+    // 波特率列表
+    ui->baudCombo->addItems({"1M", "800K", "500K", "250K", "125K", "100K", "50K", "20K", "10K", "5K"});
+    ui->baudCombo->setCurrentText("500K");
 
-    m_baudCombo = new QComboBox();
-    m_baudCombo->addItems({"1M", "800K", "500K", "250K", "125K", "100K", "50K", "20K", "10K", "5K"});
-    m_baudCombo->setCurrentText("500K");
-    form->addRow("仲裁域波特率:", m_baudCombo);
+    // CAN-FD 复选框
+    connect(ui->canFdChk, &QCheckBox::toggled, this, &SessionConfigDialog::onCanFdToggled);
 
-    m_canFdChk = new QCheckBox("启用 CAN-FD (需设备支持)");
-    connect(m_canFdChk, &QCheckBox::toggled, this, &SessionConfigDialog::onCanFdToggled);
-    form->addRow("", m_canFdChk);
+    // CAN-FD 数据域波特率
+    ui->dataBaudCombo->addItems({"2M", "4M", "5M", "8M", "10M"});
+    ui->dataBaudCombo->setCurrentText("2M");
+    ui->fdGroup->setVisible(false);
 
-    // ── CAN-FD 数据域波特率 (默认隐藏) ──
-    m_fdGroup = new QWidget();
-    auto *fdLayout = new QHBoxLayout(m_fdGroup);
-    fdLayout->setContentsMargins(0, 0, 0, 0);
-    fdLayout->addWidget(new QLabel("数据域波特率:"));
-    m_dataBaudCombo = new QComboBox();
-    m_dataBaudCombo->addItems({"2M", "4M", "5M", "8M", "10M"});
-    m_dataBaudCombo->setCurrentText("2M");
-    fdLayout->addWidget(m_dataBaudCombo);
-    m_fdGroup->setVisible(false);
-    form->addRow("", m_fdGroup);
-
-    layout->addLayout(form);
-
-    // ── 状态 ──
-    m_statusLabel = new QLabel();
-    m_statusLabel->setStyleSheet("color: #7f8c8d; font-size: 12px;");
-    layout->addWidget(m_statusLabel);
-
-    layout->addStretch();
+    // ── 状态标签 ──
+    ui->statusLabel->setStyleSheet("color: #7f8c8d; font-size: 12px;");
 
     // ── 按钮 ──
-    m_buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    m_buttonBox->button(QDialogButtonBox::Ok)->setText("创建会话");
-    m_buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setText("创建会话");
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(
         "QPushButton { background-color: #3498db; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 10px; }"
         "QPushButton:hover { background-color: #2980b9; }"
         "QPushButton:disabled { background-color: #bdc3c7; color: #95a5a6; }");
-    m_buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
-    m_buttonBox->button(QDialogButtonBox::Cancel)->setStyleSheet(
+    ui->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
+    ui->buttonBox->button(QDialogButtonBox::Cancel)->setStyleSheet(
         "QPushButton { background-color: #607d8b; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 10px; }"
         "QPushButton:hover { background-color: #455a64; }");
 
-    connect(m_buttonBox, &QDialogButtonBox::accepted, this, [this]() {
-        if (m_deviceCombo->currentData().toInt() < 0) {
+    connect(ui->buttonBox, &QDialogButtonBox::accepted, this, [this]() {
+        if (ui->deviceCombo->currentData().toInt() < 0) {
             QMessageBox::warning(this, "提示", "请选择有效的 CAN 设备");
             return;
         }
         accept();
     });
-    connect(m_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    layout->addWidget(m_buttonBox);
-
-    // ── 最后才扫描设备（确保 m_statusLabel / m_buttonBox 已创建）──
+    // ── 最后才扫描设备 ──
     scanDevices();
+}
+
+SessionConfigDialog::~SessionConfigDialog()
+{
+    delete ui;
 }
 
 void SessionConfigDialog::scanDevices()
 {
-    QString current = m_deviceCombo->currentText();
-    m_deviceCombo->clear();
+    QString current = ui->deviceCombo->currentText();
+    ui->deviceCombo->clear();
 
-    int adapterType = m_adapterCombo->currentData().toInt();
+    int adapterType = ui->adapterCombo->currentData().toInt();
     QList<CanDeviceInfo> devices;
 
     switch (static_cast<CanAdapterType>(adapterType)) {
@@ -154,36 +120,35 @@ void SessionConfigDialog::scanDevices()
     }
 
     if (devices.isEmpty()) {
-        m_deviceCombo->addItem("未检测到设备", -1);
+        ui->deviceCombo->addItem("未检测到设备", -1);
 
 #ifdef Q_OS_LINUX
         if (adapterType == static_cast<int>(CanAdapterType::SocketCAN))
-            m_statusLabel->setText("⚠ 请使用 ip link 命令配置 CAN 接口波特率\n"
+            ui->statusLabel->setText("⚠ 请使用 ip link 命令配置 CAN 接口波特率\n"
                                    "   例: sudo ip link set can0 type can bitrate 500000");
         else
 #endif
-            m_statusLabel->setText("⚠ 未检测到设备，请检查连接和驱动");
+            ui->statusLabel->setText("⚠ 未检测到设备，请检查连接和驱动");
     } else {
         for (const auto &dev : devices) {
-            m_deviceCombo->addItem(QString("%1  [通道 %2]")
+            ui->deviceCombo->addItem(QString("%1  [通道 %2]")
                 .arg(dev.name)
                 .arg(dev.channel), dev.channel);
         }
-        m_statusLabel->setText(QString("✓ 检测到 %1 个设备").arg(devices.size()));
+        ui->statusLabel->setText(QString("✓ 检测到 %1 个设备").arg(devices.size()));
     }
 
-    int idx = m_deviceCombo->findText(current, Qt::MatchStartsWith);
-    if (idx >= 0) m_deviceCombo->setCurrentIndex(idx);
+    int idx = ui->deviceCombo->findText(current, Qt::MatchStartsWith);
+    if (idx >= 0) ui->deviceCombo->setCurrentIndex(idx);
 
     // 有设备时自动启用 OK 按钮
-    if (auto *btn = m_buttonBox->button(QDialogButtonBox::Ok))
-        btn->setEnabled(m_deviceCombo->currentData().toInt() >= 0);
+    if (auto *btn = ui->buttonBox->button(QDialogButtonBox::Ok))
+        btn->setEnabled(ui->deviceCombo->currentData().toInt() >= 0);
 }
 
 void SessionConfigDialog::onCanFdToggled(bool checked)
 {
-    m_fdGroup->setVisible(checked);
-    // 调整窗口大小
+    ui->fdGroup->setVisible(checked);
     adjustSize();
 }
 
@@ -193,10 +158,10 @@ bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCan
     if (exec() != QDialog::Accepted)
         return false;
 
-    adapterType = m_adapterCombo->currentData().toInt();
-    channel = m_deviceCombo->currentData().toInt();
+    adapterType = ui->adapterCombo->currentData().toInt();
+    channel = ui->deviceCombo->currentData().toInt();
 
-    QString baudStr = m_baudCombo->currentText();
+    QString baudStr = ui->baudCombo->currentText();
     if (baudStr == "1M")         baud = CanBaudRate::BR_1M;
     else if (baudStr == "800K")  baud = CanBaudRate::BR_800K;
     else if (baudStr == "250K")  baud = CanBaudRate::BR_250K;
@@ -208,11 +173,11 @@ bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCan
     else if (baudStr == "5K")    baud = CanBaudRate::BR_5K;
     else                         baud = CanBaudRate::BR_500K;
 
-    isCanFd = m_canFdChk->isChecked();
+    isCanFd = ui->canFdChk->isChecked();
 
     // CAN-FD 数据域波特率
     if (isCanFd) {
-        QString dBaudStr = m_dataBaudCombo->currentText();
+        QString dBaudStr = ui->dataBaudCombo->currentText();
         if (dBaudStr == "2M")      dataBaud = CanBaudRate::BR_1M;    // 暂用1M值占位
         else if (dBaudStr == "4M") dataBaud = CanBaudRate::BR_800K;
         else if (dBaudStr == "5M") dataBaud = CanBaudRate::BR_500K;

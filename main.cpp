@@ -16,9 +16,16 @@ int main(int argc, char *argv[])
     a.setWindowIcon(QIcon(":/icon.png"));
     a.setStyle(QStyleFactory::create("Fusion"));
 
-    // 全局字体略大一号，保证可读性
-    QFont font = a.font();
-    font.setPointSize(9);
+    // 全局字体 —— 可读性优先
+    QFont font;
+#ifdef Q_OS_WIN
+    font = QFont("Segoe UI", 10);
+    font.setStyleStrategy(QFont::PreferAntialias);
+#else
+    font = QFont("Noto Sans", 10);
+    font.setStyleStrategy(QFont::PreferAntialias);
+#endif
+    font.setHintingPreference(QFont::PreferFullHinting);
     a.setFont(font);
 
     MainWindow w;

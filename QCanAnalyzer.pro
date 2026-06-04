@@ -125,7 +125,10 @@ unix:!macx {
 }
 
 FORMS += \
-    mainwindow.ui
+    mainwindow.ui \
+    ui/welcomewidget.ui \
+    ui/sessionconfigdialog.ui \
+    ui/cansessionwidget.ui
 
 TRANSLATIONS += \
     QCanAnalyzer_zh_CN.ts

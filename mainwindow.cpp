@@ -144,28 +144,41 @@ void MainWindow::setupMenuBar()
 
     QAction *tileHAct = new QAction("水平平铺", this);
     connect(tileHAct, &QAction::triggered, this, [this]() {
-        auto *splitter = m_dockManager->findChild<QSplitter*>();
-        if (splitter) {
-            splitter->setOrientation(Qt::Horizontal);
-            QList<int> sizes;
-            int total = splitter->width();
-            for (int i = 0; i < splitter->count(); ++i)
-                sizes << total / splitter->count();
-            splitter->setSizes(sizes);
+        QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
+        if (areas.size() < 2) return;
+
+        // 将所有 dock area 合并到第一个，然后用 splitDockArea 水平拆分
+        ads::CDockAreaWidget *first = areas.first();
+        for (int i = 1; i < areas.size(); ++i) {
+            auto docks = areas[i]->dockWidgets();
+            for (auto *dw : docks)
+                m_dockManager->addDockWidgetTabToArea(dw, first);
+        }
+        // 按数量水平拆分：逐个从 first 中拆分出新的 area
+        for (int i = 1; i < areas.size(); ++i) {
+            auto *firstDock = first->dockWidgets().first();
+            first = m_dockManager->addDockWidget(
+                ads::CenterDockWidgetArea, firstDock, first->currentDockContainer());
         }
     });
     windowMenu->addAction(tileHAct);
 
     QAction *tileVAct = new QAction("垂直平铺", this);
     connect(tileVAct, &QAction::triggered, this, [this]() {
-        auto *splitter = m_dockManager->findChild<QSplitter*>();
-        if (splitter) {
-            splitter->setOrientation(Qt::Vertical);
-            QList<int> sizes;
-            int total = splitter->height();
-            for (int i = 0; i < splitter->count(); ++i)
-                sizes << total / splitter->count();
-            splitter->setSizes(sizes);
+        QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
+        if (areas.size() < 2) return;
+
+        ads::CDockAreaWidget *first = areas.first();
+        for (int i = 1; i < areas.size(); ++i) {
+            auto docks = areas[i]->dockWidgets();
+            for (auto *dw : docks)
+                m_dockManager->addDockWidgetTabToArea(dw, first);
+        }
+        // 按数量垂直拆分
+        for (int i = 1; i < areas.size(); ++i) {
+            auto *firstDock = first->dockWidgets().first();
+            first = m_dockManager->addDockWidget(
+                ads::BottomDockWidgetArea, firstDock, first->currentDockContainer());
         }
     });
     windowMenu->addAction(tileVAct);

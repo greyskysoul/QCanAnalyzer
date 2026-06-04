@@ -1,80 +1,58 @@
 #include "welcomewidget.h"
-#include <QVBoxLayout>
+#include "ui_welcomewidget.h"
 #include <QPainter>
 #include <QLinearGradient>
 #include <QFont>
 #include <QApplication>
-#include <QStyle>
 #include <QScreen>
-#include <QWindow>
 #include <QPixmap>
 
 WelcomeWidget::WelcomeWidget(QWidget *parent)
     : QWidget(parent)
+    , ui(new Ui::WelcomeWidget)
 {
-    setMinimumSize(600, 400);
+    ui->setupUi(this);
     setAutoFillBackground(false);
-
-    auto *layout = new QVBoxLayout(this);
-    layout->setAlignment(Qt::AlignCenter);
-    layout->setSpacing(18);
 
     qreal devicePixel = QApplication::primaryScreen()->devicePixelRatio();
 
     // ── 图标区域 ──
     {
         int iconSize = qMax(48, qRound(64 * devicePixel / 2));
-        auto *iconLabel = new QLabel();
-        iconLabel->setAlignment(Qt::AlignCenter);
         QPixmap icon(":/icon.png");
-        iconLabel->setPixmap(icon.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        iconLabel->setStyleSheet("background: transparent;");
-        layout->addWidget(iconLabel);
+        ui->iconLabel->setPixmap(icon.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        ui->iconLabel->setStyleSheet("background: transparent;");
     }
 
     // ── 标题 ──
     {
         int titleSize = qMax(22, qRound(32 * devicePixel / 2));
-        auto *titleLabel = new QLabel("QCanAnalyzer");
-        titleLabel->setAlignment(Qt::AlignCenter);
-        titleLabel->setStyleSheet(
+        ui->titleLabel->setStyleSheet(
             QString("font-size: %1px; font-weight: bold; color: #2c3e50; background: transparent;")
                 .arg(titleSize));
-        layout->addWidget(titleLabel);
     }
 
     // ── 副标题 ──
     {
         int subSize = qMax(12, qRound(15 * devicePixel / 2));
-        auto *subtitleLabel = new QLabel("CAN 总线调试分析工具");
-        subtitleLabel->setAlignment(Qt::AlignCenter);
-        subtitleLabel->setStyleSheet(
+        ui->subtitleLabel->setStyleSheet(
             QString("font-size: %1px; color: #7f8c8d; background: transparent; margin-bottom: 10px;")
                 .arg(subSize));
-        layout->addWidget(subtitleLabel);
     }
 
     // ── 分割线 ──
     {
-        int lineWidth = qRound(200 * devicePixel / 2);
-        auto *line = new QWidget();
-        line->setFixedSize(qMax(120, lineWidth), 2);
-        line->setStyleSheet("background-color: #3498db; border-radius: 1px;");
-        layout->addWidget(line, 0, Qt::AlignCenter);
+        int lineWidth = qMax(120, qRound(200 * devicePixel / 2));
+        ui->dividerLine->setFixedWidth(lineWidth);
+        ui->dividerLine->setStyleSheet("background-color: #3498db; border-radius: 1px;");
     }
 
     // ── 描述文字 ──
     {
         int descSize = qMax(11, qRound(13 * devicePixel / 2));
-        auto *descLabel = new QLabel(
-            "支持 PCAN 系列设备  ·  多会话同时工作  ·  报文实时分析");
-        descLabel->setAlignment(Qt::AlignCenter);
-        descLabel->setWordWrap(true);
-        descLabel->setStyleSheet(
+        ui->descLabel->setStyleSheet(
             QString("font-size: %1px; color: #95a5a6; background: transparent; "
                     "padding: 10px 40px;").arg(descSize));
-        descLabel->setMaximumWidth(500);
-        layout->addWidget(descLabel);
     }
 
     // ── 新建会话按钮 ──
@@ -82,10 +60,9 @@ WelcomeWidget::WelcomeWidget(QWidget *parent)
         int btnFont = qMax(13, qRound(15 * devicePixel / 2));
         int btnW = qMax(180, qRound(240 * devicePixel / 2));
         int btnH = qMax(38, qRound(48 * devicePixel / 2));
-        m_newSessionBtn = new QPushButton("＋ 新建 CAN 会话");
-        m_newSessionBtn->setMinimumSize(btnW, btnH);
-        m_newSessionBtn->setCursor(Qt::PointingHandCursor);
-        m_newSessionBtn->setStyleSheet(
+        ui->newSessionBtn->setMinimumSize(btnW, btnH);
+        ui->newSessionBtn->setCursor(Qt::PointingHandCursor);
+        ui->newSessionBtn->setStyleSheet(
             QString(
                 "QPushButton {"
                 "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
@@ -105,33 +82,21 @@ WelcomeWidget::WelcomeWidget(QWidget *parent)
                 "  background: #1a5276;"
                 "}"
             ).arg(btnFont).arg(btnH / 2));
-        connect(m_newSessionBtn, &QPushButton::clicked, this, &WelcomeWidget::newSessionRequested);
-        layout->addWidget(m_newSessionBtn, 0, Qt::AlignCenter);
+        connect(ui->newSessionBtn, &QPushButton::clicked, this, &WelcomeWidget::newSessionRequested);
     }
-
-    layout->addSpacing(10);
 
     // ── 快捷键提示 ──
     {
         int hintSize = qMax(10, qRound(12 * devicePixel / 2));
-        auto *shortcutLabel = new QLabel("提示: 按 Ctrl+N 快速新建会话");
-        shortcutLabel->setAlignment(Qt::AlignCenter);
-        shortcutLabel->setStyleSheet(
+        ui->shortcutLabel->setStyleSheet(
             QString("font-size: %1px; color: #bdc3c7; background: transparent;")
                 .arg(hintSize));
-        layout->addWidget(shortcutLabel);
     }
+}
 
-    // ── 底部版本 ──
-    {
-        int verSize = qMax(9, qRound(11 * devicePixel / 2));
-        auto *versionLabel = new QLabel("v1.0  |  Qt 5.14  |  PCAN");
-        versionLabel->setAlignment(Qt::AlignCenter);
-        versionLabel->setStyleSheet(
-            QString("font-size: %1px; color: #bdc3c7; background: transparent; margin-top: 20px;")
-                .arg(verSize));
-        layout->addWidget(versionLabel);
-    }
+WelcomeWidget::~WelcomeWidget()
+{
+    delete ui;
 }
 
 void WelcomeWidget::paintEvent(QPaintEvent *)

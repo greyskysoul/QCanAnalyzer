@@ -3,12 +3,15 @@
 
 #include "can/caninterface.h"
 #include <QDialog>
-#include <QComboBox>
-#include <QCheckBox>
-#include <QLineEdit>
-#include <QDialogButtonBox>
-#include <QWidget>
-#include <QLabel>
+
+QT_BEGIN_NAMESPACE
+namespace Ui { class SessionConfigDialog; }
+QT_END_NAMESPACE
+
+class QComboBox;
+class QCheckBox;
+class QDialogButtonBox;
+class QLabel;
 
 /// 新建会话时的参数配置对话框
 class SessionConfigDialog : public QDialog
@@ -17,6 +20,7 @@ class SessionConfigDialog : public QDialog
 
 public:
     explicit SessionConfigDialog(QWidget *parent = nullptr);
+    ~SessionConfigDialog();
 
     /// 运行对话框，返回 true 表示用户点击了确定
     bool configure(int &channel, CanBaudRate &baud, bool &isCanFd,
@@ -28,16 +32,7 @@ private slots:
 private:
     void scanDevices();
 
-    QComboBox      *m_adapterCombo;
-    QComboBox      *m_deviceCombo;
-    QComboBox      *m_baudCombo;
-    QCheckBox      *m_canFdChk;
-    QLabel         *m_statusLabel;
-    QDialogButtonBox *m_buttonBox;
-
-    // CAN-FD 额外控件
-    QWidget        *m_fdGroup;
-    QComboBox      *m_dataBaudCombo;
+    Ui::SessionConfigDialog *ui;
 };
 
 #endif // SESSIONCONFIGDIALOG_H

@@ -15,6 +15,10 @@
 #include <QTimer>
 #include <QLayout>
 
+QT_BEGIN_NAMESPACE
+namespace Ui { class CanSessionWidget; }
+QT_END_NAMESPACE
+
 class PcanAdapter;
 class GsUsbAdapter;
 class SocketCanAdapter;
@@ -62,34 +66,16 @@ private:
     void onStatusCheck();
     void updateUiState(bool connected);
 
+    Ui::CanSessionWidget *ui;
+
     int m_sessionId;
 
-    // ─── 连接区域 ───
-    QLabel      *m_deviceLabel;
-    QComboBox   *m_baudCombo;
-    QPushButton *m_connectBtn;
-    QLabel      *m_statusLabel;
-
-    // ─── 通道接收复选框容器 ───
-    QHBoxLayout *m_channelChkLayout;
+    // ─── 通道接收复选框 ───
     QList<QCheckBox*> m_channelChks;
 
-    // ─── 接收表格 ───
-    QTableWidget *m_rxTable;
-    QLabel       *m_rxCountLabel;
-    QPushButton  *m_saveBtn;
-    QPushButton  *m_clearBtn;
-    QCheckBox    *m_autoScrollChk;
-
-    // ─── 发送区域 ───
-    QLineEdit   *m_sendIdEdit;
-    QComboBox   *m_sendTypeCombo;
-    QSpinBox    *m_sendDlcSpin;
-    QLineEdit   *m_sendDataEdit;
-    QSpinBox    *m_sendPeriodSpin;
-    QPushButton *m_sendBtn;
-    QCheckBox   *m_periodicSendChk;
-    QTimer      *m_periodicTimer;
+    // ─── 定时器 ───
+    QTimer      *m_periodicTimer = nullptr;
+    QTimer      *m_statusTimer = nullptr;
 
     // ─── CAN 接口 ───
     CanInterface *m_can = nullptr;
@@ -98,9 +84,6 @@ private:
     SocketCanAdapter *m_socketcan = nullptr;
     int          m_currentChannel = 0;
     int          m_adapterType = 0;
-
-    // ─── 状态监控定时器 ───
-    QTimer       *m_statusTimer = nullptr;
 
     // ─── 统计 ───
     int m_rxCount = 0;

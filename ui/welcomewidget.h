@@ -2,8 +2,10 @@
 #define WELCOMEWIDGET_H
 
 #include <QWidget>
-#include <QLabel>
-#include <QPushButton>
+
+QT_BEGIN_NAMESPACE
+namespace Ui { class WelcomeWidget; }
+QT_END_NAMESPACE
 
 class WelcomeWidget : public QWidget
 {
@@ -11,6 +13,7 @@ class WelcomeWidget : public QWidget
 
 public:
     explicit WelcomeWidget(QWidget *parent = nullptr);
+    ~WelcomeWidget();
 
 signals:
     void newSessionRequested();
@@ -19,7 +22,7 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
-    QPushButton *m_newSessionBtn;
+    Ui::WelcomeWidget *ui;
 };
 
 #endif // WELCOMEWIDGET_H
