@@ -1,7 +1,10 @@
 #include "cansessionwidget.h"
+#ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
+#else
 #include "can/socketcanadapter.h"
+#endif
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -20,6 +23,7 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
 {
     setupUi();
 
+#ifndef Q_OS_LINUX
     // 默认创建 PCAN（可按需切换）
     m_pcan = new PcanAdapter(this);
     m_can = m_pcan;
@@ -35,6 +39,21 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
         m_statusLabel->setToolTip(err);  // 鼠标悬停看完整错误
         m_statusLabel->setStyleSheet("color:orange; font-weight:bold;");
     });
+#else
+    m_socketcan = new SocketCanAdapter(this);
+    m_can = m_socketcan;
+
+    connect(m_socketcan, &CanInterface::messageReceived,
+            this, &CanSessionWidget::onMessageReceived);
+    connect(m_socketcan, &CanInterface::errorOccurred, this, [this](const QString &err) {
+        QString shortErr = err;
+        if (shortErr.length() > 50)
+            shortErr = shortErr.left(47) + "...";
+        m_statusLabel->setText("⚠ " + shortErr);
+        m_statusLabel->setToolTip(err);
+        m_statusLabel->setStyleSheet("color:orange; font-weight:bold;");
+    });
+#endif
 
     m_periodicTimer = new QTimer(this);
     connect(m_periodicTimer, &QTimer::timeout, this, &CanSessionWidget::onSendClicked);
@@ -267,6 +286,7 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
     CanInterface *newCan = nullptr;
 
     switch (static_cast<CanAdapterType>(adapterType)) {
+#ifndef Q_OS_LINUX
     case CanAdapterType::PCAN:
         if (!m_pcan) { m_pcan = new PcanAdapter(this); linkSignals(m_pcan); }
         newCan = m_pcan;
@@ -275,13 +295,21 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
         if (!m_gsusb) { m_gsusb = new GsUsbAdapter(this); linkSignals(m_gsusb); }
         newCan = m_gsusb;
         break;
+#endif
+#ifdef Q_OS_LINUX
     case CanAdapterType::SocketCAN:
         if (!m_socketcan) { m_socketcan = new SocketCanAdapter(this); linkSignals(m_socketcan); }
         newCan = m_socketcan;
         break;
+#endif
     default:
+#ifdef Q_OS_LINUX
+        if (!m_socketcan) { m_socketcan = new SocketCanAdapter(this); linkSignals(m_socketcan); }
+        newCan = m_socketcan;
+#else
         if (!m_pcan) { m_pcan = new PcanAdapter(this); linkSignals(m_pcan); }
         newCan = m_pcan;
+#endif
         break;
     }
 
@@ -391,10 +419,10 @@ void CanSessionWidget::updateChannelCheckboxes()
     qDeleteAll(m_channelChks);
     m_channelChks.clear();
 
-    if (!m_pcan) return;
+    if (!m_can) return;
 
-    // 扫描设备获取通道列表
-    QList<CanDeviceInfo> devices = m_pcan->scanDevices();
+    // 通过基类指针扫描设备获取通道列表
+    QList<CanDeviceInfo> devices = m_can->scanDevices();
 
     // 如果没扫到设备但有当前通道号，至少显示当前通道
     if (devices.isEmpty() && m_currentChannel > 0) {

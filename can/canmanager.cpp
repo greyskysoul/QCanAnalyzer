@@ -1,7 +1,10 @@
 #include "canmanager.h"
+#ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
+#else
 #include "can/socketcanadapter.h"
+#endif
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <DockAreaWidget.h>
@@ -33,9 +36,13 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
     // 标签名根据适配器类型
     QString devName;
     switch (static_cast<CanAdapterType>(adapterType)) {
+#ifndef Q_OS_LINUX
     case CanAdapterType::PCAN:     devName = PcanAdapter::channelName(channel); break;
     case CanAdapterType::GsUsb:    devName = GsUsbAdapter::channelName(channel); break;
+#endif
+#ifdef Q_OS_LINUX
     case CanAdapterType::SocketCAN:devName = SocketCanAdapter::channelName(channel); break;
+#endif
     default: devName = QString("CAN-%1").arg(channel);
     }
     QString title = QString("%1 @ %2").arg(devName).arg(baudRateString(baud));

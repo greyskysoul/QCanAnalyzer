@@ -50,6 +50,24 @@ nmake       # MSVC
 mingw32-make  # MinGW
 ```
 
+### Linux 额外依赖
+
+在 Linux 下编译需要安装 xcb 开发库:
+
+```bash
+# Debian/Ubuntu
+sudo apt install libxcb1-dev
+
+# Fedora
+sudo dnf install libxcb-devel
+
+# Arch
+sudo pacman -S libxcb
+```
+
+Linux 下仅支持 SocketCAN 适配器，无需安装 PCAN 或 candle 驱动。
+```
+
 ### 5. 运行
 
 ```bash

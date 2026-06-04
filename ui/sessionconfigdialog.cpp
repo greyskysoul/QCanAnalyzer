@@ -1,7 +1,10 @@
 #include "sessionconfigdialog.h"
+#ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
+#else
 #include "can/socketcanadapter.h"
+#endif
 
 #include <QVBoxLayout>
 #include <QFormLayout>
@@ -97,7 +100,8 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     m_buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(
         "QPushButton { background-color: #3498db; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 10px; }"
-        "QPushButton:hover { background-color: #2980b9; }");
+        "QPushButton:hover { background-color: #2980b9; }"
+        "QPushButton:disabled { background-color: #bdc3c7; color: #95a5a6; }");
     m_buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
     m_buttonBox->button(QDialogButtonBox::Cancel)->setStyleSheet(
         "QPushButton { background-color: #607d8b; color: white; font-weight: bold; "
@@ -105,7 +109,7 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
         "QPushButton:hover { background-color: #455a64; }");
 
     connect(m_buttonBox, &QDialogButtonBox::accepted, this, [this]() {
-        if (m_deviceCombo->currentData().toInt() <= 0) {
+        if (m_deviceCombo->currentData().toInt() < 0) {
             QMessageBox::warning(this, "提示", "请选择有效的 CAN 设备");
             return;
         }
@@ -128,6 +132,7 @@ void SessionConfigDialog::scanDevices()
     QList<CanDeviceInfo> devices;
 
     switch (static_cast<CanAdapterType>(adapterType)) {
+#ifndef Q_OS_LINUX
     case CanAdapterType::PCAN: {
         PcanAdapter adapter;
         devices = adapter.scanDevices();
@@ -138,11 +143,14 @@ void SessionConfigDialog::scanDevices()
         devices = adapter.scanDevices();
         break;
     }
+#endif
+#ifdef Q_OS_LINUX
     case CanAdapterType::SocketCAN: {
         SocketCanAdapter adapter;
         devices = adapter.scanDevices();
         break;
     }
+#endif
     }
 
     if (devices.isEmpty()) {
@@ -169,7 +177,7 @@ void SessionConfigDialog::scanDevices()
 
     // 有设备时自动启用 OK 按钮
     if (auto *btn = m_buttonBox->button(QDialogButtonBox::Ok))
-        btn->setEnabled(m_deviceCombo->currentData().toInt() > 0);
+        btn->setEnabled(m_deviceCombo->currentData().toInt() >= 0);
 }
 
 void SessionConfigDialog::onCanFdToggled(bool checked)

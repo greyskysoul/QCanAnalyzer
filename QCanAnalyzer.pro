@@ -19,13 +19,17 @@ ADS_ROOT = libs/Qt-Advanced-Docking-System
 INCLUDEPATH += $$ADS_ROOT/src
 
 # ═══════════════════════════════════════════════════════════════
-# candle API (gs_usb / candleLight 驱动)
+# candle API (gs_usb / candleLight 驱动) — 仅 Windows
 # ═══════════════════════════════════════════════════════════════
 INCLUDEPATH += can/CandleApiDriver/api
 
-SOURCES += \
-    can/CandleApiDriver/api/candle.c \
-    can/CandleApiDriver/api/candle_ctrl_req.c
+win32 {
+    SOURCES += \
+        can/CandleApiDriver/api/candle.c \
+        can/CandleApiDriver/api/candle_ctrl_req.c
+
+    LIBS += -lwinusb -lsetupapi -lcfgmgr32 -lole32
+}
 
 SOURCES += \
     $$ADS_ROOT/src/ads_globals.cpp \
@@ -80,15 +84,12 @@ RESOURCES += $$ADS_ROOT/src/ads.qrc \
     resources.qrc
 
 # ═══════════════════════════════════════════════════════════════
-# 源文件
+# 源文件（通用）
 # ═══════════════════════════════════════════════════════════════
 
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    can/pcanadapter.cpp \
-    can/gsusbadapter.cpp \
-    can/socketcanadapter.cpp \
     can/canmanager.cpp \
     ui/cansessionwidget.cpp \
     ui/welcomewidget.cpp \
@@ -98,13 +99,30 @@ HEADERS += \
     mainwindow.h \
     can/canmessage.h \
     can/caninterface.h \
-    can/pcanadapter.h \
-    can/gsusbadapter.h \
-    can/socketcanadapter.h \
     can/canmanager.h \
     ui/cansessionwidget.h \
     ui/welcomewidget.h \
     ui/sessionconfigdialog.h
+
+# ── Windows 适配器 ──
+win32 {
+    SOURCES += \
+        can/pcanadapter.cpp \
+        can/gsusbadapter.cpp
+
+    HEADERS += \
+        can/pcanadapter.h \
+        can/gsusbadapter.h
+}
+
+# ── Linux 适配器 ──
+unix:!macx {
+    SOURCES += \
+        can/socketcanadapter.cpp
+
+    HEADERS += \
+        can/socketcanadapter.h
+}
 
 FORMS += \
     mainwindow.ui
@@ -116,15 +134,21 @@ TRANSLATIONS += \
 # 部署规则
 # ═══════════════════════════════════════════════════════════════
 
-# Linux SocketCAN 需要 socket 库
+# Linux SocketCAN 需要 socket 库, ADS 需要 xcb 和 Qt 私有 QPA 头文件
 unix:!macx {
     LIBS += -lxcb
+
+    # Qt 私有 QPA 头文件路径 (ads_globals.cpp 需要 qpa/qplatformnativeinterface.h)
+    QT += gui-private
+
+    # Linux 平台特定的 ADS 源文件
+    SOURCES += \
+        $$ADS_ROOT/src/linux/FloatingWidgetTitleBar.cpp
+
+    HEADERS += \
+        $$ADS_ROOT/src/linux/FloatingWidgetTitleBar.h
 }
 
-# Windows candle API 需要 ole32 (CLSIDFromString) / winusb / setupapi / cfgmgr32
-win32 {
-    LIBS += -lwinusb -lsetupapi -lcfgmgr32 -lole32
-}
 # (socket 和 can 头文件已在 Linux 内核头文件中)
 
 qnx: target.path = /tmp/$${TARGET}/bin
