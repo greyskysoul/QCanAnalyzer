@@ -66,13 +66,15 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
         addToExistingTabGroup(dockWidget);
     }
 
-    // 关闭时清理
+    // 关闭时清理 (使用 closing 集合防止重复触发)
     connect(dockWidget, &ads::CDockWidget::closed, this, [this, id]() {
-        closeSession(id);
+        if (!m_closingSessions.contains(id))
+            closeSession(id);
     });
 
-    // 会话销毁时清理dock
+    // 会话销毁时确保dock也被清理 (仅当 closeSession 未正常触发时作为兜底)
     connect(widget, &QObject::destroyed, this, [this, id]() {
+        m_closingSessions.remove(id);
         if (m_dockWidgets.contains(id)) {
             m_dockWidgets[id]->deleteLater();
             m_dockWidgets.remove(id);
@@ -92,7 +94,7 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
 
 void CanManager::addToExistingTabGroup(ads::CDockWidget *dockWidget)
 {
-    if (!m_lastArea || !m_dockManager) {
+    if (!findValidArea()) {
         m_lastArea = m_dockManager->addDockWidget(
             ads::CenterDockWidgetArea, dockWidget);
         return;
@@ -102,18 +104,34 @@ void CanManager::addToExistingTabGroup(ads::CDockWidget *dockWidget)
     m_dockManager->addDockWidgetTabToArea(dockWidget, m_lastArea);
 }
 
+bool CanManager::findValidArea()
+{
+    // 检查 m_lastArea 是否仍然有效
+    if (!m_lastArea || !m_dockManager) return false;
+
+    QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
+    if (!areas.contains(m_lastArea)) {
+        // m_lastArea 已失效，尝试从现有 areas 中找一个
+        m_lastArea = areas.isEmpty() ? nullptr : areas.first();
+    }
+    return m_lastArea != nullptr;
+}
+
 void CanManager::closeSession(int sessionId)
 {
+    // 防止重复关闭
+    if (m_closingSessions.contains(sessionId)) return;
+    m_closingSessions.insert(sessionId);
+
     if (m_sessions.contains(sessionId)) {
-        CanSessionWidget *w = m_sessions[sessionId];
-        m_sessions.remove(sessionId);
-        w->disconnectDevice();
+        CanSessionWidget *w = m_sessions.take(sessionId);
+        // 不在此处调用 disconnectDevice(), 而是直接 deleteLater
+        // 因为 disconnectDevice() 访问 UI 控件，而 closeSession 可能由 dock 关闭触发
         w->deleteLater();
     }
 
     if (m_dockWidgets.contains(sessionId)) {
-        ads::CDockWidget *dw = m_dockWidgets[sessionId];
-        m_dockWidgets.remove(sessionId);
+        ads::CDockWidget *dw = m_dockWidgets.take(sessionId);
         dw->deleteLater();
     }
 

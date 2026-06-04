@@ -28,29 +28,11 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
 #ifndef Q_OS_LINUX
     m_pcan = new PcanAdapter(this);
     m_can = m_pcan;
-    connect(m_pcan, &CanInterface::messageReceived,
-            this, &CanSessionWidget::onMessageReceived);
-    connect(m_pcan, &CanInterface::errorOccurred, this, [this](const QString &err) {
-        QString shortErr = err;
-        if (shortErr.length() > 50)
-            shortErr = shortErr.left(47) + "...";
-        ui->statusLabel->setText("⚠ " + shortErr);
-        ui->statusLabel->setToolTip(err);
-        ui->statusLabel->setStyleSheet("color:orange; font-weight:bold;");
-    });
+    linkSignals(m_pcan);
 #else
     m_socketcan = new SocketCanAdapter(this);
     m_can = m_socketcan;
-    connect(m_socketcan, &CanInterface::messageReceived,
-            this, &CanSessionWidget::onMessageReceived);
-    connect(m_socketcan, &CanInterface::errorOccurred, this, [this](const QString &err) {
-        QString shortErr = err;
-        if (shortErr.length() > 50)
-            shortErr = shortErr.left(47) + "...";
-        ui->statusLabel->setText("⚠ " + shortErr);
-        ui->statusLabel->setToolTip(err);
-        ui->statusLabel->setStyleSheet("color:orange; font-weight:bold;");
-    });
+    linkSignals(m_socketcan);
 #endif
 
     m_periodicTimer = new QTimer(this);
@@ -92,7 +74,7 @@ void CanSessionWidget::setupUi()
 {
     qreal scale = QApplication::primaryScreen()->devicePixelRatio();
 
-    const QString btnStyle = QString(
+    const QString btnStyle = QStringLiteral(
         "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; }");
     const QString greenBtn = btnStyle +
         "QPushButton { background-color: #4CAF50; color: white; }"
@@ -116,17 +98,17 @@ void CanSessionWidget::setupUi()
     ui->statusLabel->setMinimumWidth(qRound(120 * scale));
 
     // ─── 接收表格 ───
-    ui->rxTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(0, qRound(130 * scale));
-    ui->rxTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(1, qRound(90 * scale));
-    ui->rxTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(2, qRound(55 * scale));
-    ui->rxTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(3, qRound(45 * scale));
-    ui->rxTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
-    ui->rxTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(5, qRound(50 * scale));
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColTime, QHeaderView::Fixed);
+    ui->rxTable->horizontalHeader()->resizeSection(ColTime, qRound(130 * scale));
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColId, QHeaderView::Fixed);
+    ui->rxTable->horizontalHeader()->resizeSection(ColId, qRound(90 * scale));
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColType, QHeaderView::Fixed);
+    ui->rxTable->horizontalHeader()->resizeSection(ColType, qRound(55 * scale));
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDlc, QHeaderView::Fixed);
+    ui->rxTable->horizontalHeader()->resizeSection(ColDlc, qRound(45 * scale));
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColData, QHeaderView::Stretch);
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDir, QHeaderView::Fixed);
+    ui->rxTable->horizontalHeader()->resizeSection(ColDir, qRound(50 * scale));
     ui->rxTable->horizontalHeader()->setStretchLastSection(false);
     ui->rxTable->verticalHeader()->setDefaultSectionSize(qRound(24 * scale));
 
@@ -349,17 +331,7 @@ void CanSessionWidget::onConnectClicked()
     }
 
     if (m_currentChannel >= 0) {
-        QString baudStr = ui->baudCombo->currentText();
-        CanBaudRate baud = CanBaudRate::BR_500K;
-        if (baudStr == "1M")    baud = CanBaudRate::BR_1M;
-        else if (baudStr == "800K")  baud = CanBaudRate::BR_800K;
-        else if (baudStr == "250K")  baud = CanBaudRate::BR_250K;
-        else if (baudStr == "125K")  baud = CanBaudRate::BR_125K;
-        else if (baudStr == "100K")  baud = CanBaudRate::BR_100K;
-        else if (baudStr == "50K")   baud = CanBaudRate::BR_50K;
-        else if (baudStr == "20K")   baud = CanBaudRate::BR_20K;
-        else if (baudStr == "10K")   baud = CanBaudRate::BR_10K;
-        else if (baudStr == "5K")    baud = CanBaudRate::BR_5K;
+        CanBaudRate baud = baudRateFromString(ui->baudCombo->currentText());
 
         connectDevice(m_currentChannel, baud, m_adapterType);
     }
@@ -436,7 +408,7 @@ void CanSessionWidget::onSaveClicked()
             auto *item = ui->rxTable->item(row, col);
             if (item) {
                 QString text = item->text();
-                if (col == 4 && !text.isEmpty())
+                if (col == ColData && !text.isEmpty())
                     out << "\"" << text << "\"";
                 else
                     out << text;
@@ -469,30 +441,30 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
 
     auto *timeItem = new QTableWidgetItem(msg.timestamp.toString("hh:mm:ss.zzz"));
     timeItem->setTextAlignment(Qt::AlignCenter);
-    ui->rxTable->setItem(row, 0, timeItem);
+    ui->rxTable->setItem(row, ColTime, timeItem);
 
     auto *idItem = new QTableWidgetItem(msg.idString());
     idItem->setTextAlignment(Qt::AlignCenter);
     if (msg.type == CanFrameType::ExtendedData)
         idItem->setForeground(QColor("#E91E63"));
-    ui->rxTable->setItem(row, 1, idItem);
+    ui->rxTable->setItem(row, ColId, idItem);
 
     auto *typeItem = new QTableWidgetItem(msg.typeString());
     typeItem->setTextAlignment(Qt::AlignCenter);
-    ui->rxTable->setItem(row, 2, typeItem);
+    ui->rxTable->setItem(row, ColType, typeItem);
 
     auto *dlcItem = new QTableWidgetItem(QString::number(msg.dlc));
     dlcItem->setTextAlignment(Qt::AlignCenter);
-    ui->rxTable->setItem(row, 3, dlcItem);
+    ui->rxTable->setItem(row, ColDlc, dlcItem);
 
     auto *dataItem = new QTableWidgetItem(msg.dataHex());
     dataItem->setFont(QFont("Consolas", 9));
-    ui->rxTable->setItem(row, 4, dataItem);
+    ui->rxTable->setItem(row, ColData, dataItem);
 
     auto *dirItem = new QTableWidgetItem(msg.direction == CanDirection::Rx ? "Rx" : "Tx");
     dirItem->setTextAlignment(Qt::AlignCenter);
     dirItem->setForeground(msg.direction == CanDirection::Rx ? QColor("#2196F3") : QColor("#4CAF50"));
-    ui->rxTable->setItem(row, 5, dirItem);
+    ui->rxTable->setItem(row, ColDir, dirItem);
 
     if (ui->autoScrollChk->isChecked())
         ui->rxTable->scrollToBottom();

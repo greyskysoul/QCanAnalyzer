@@ -52,6 +52,21 @@ inline QString baudRateString(CanBaudRate br) {
     }
 }
 
+/// 字符串转波特率
+inline CanBaudRate baudRateFromString(const QString &str) {
+    if (str == "1M")    return CanBaudRate::BR_1M;
+    if (str == "800K")  return CanBaudRate::BR_800K;
+    if (str == "500K")  return CanBaudRate::BR_500K;
+    if (str == "250K")  return CanBaudRate::BR_250K;
+    if (str == "125K")  return CanBaudRate::BR_125K;
+    if (str == "100K")  return CanBaudRate::BR_100K;
+    if (str == "50K")   return CanBaudRate::BR_50K;
+    if (str == "20K")   return CanBaudRate::BR_20K;
+    if (str == "10K")   return CanBaudRate::BR_10K;
+    if (str == "5K")    return CanBaudRate::BR_5K;
+    return CanBaudRate::BR_500K;
+}
+
 /// CAN 接口抽象基类 —— 所有 CAN 适配器必须实现此接口
 class CanInterface : public QObject
 {

@@ -17,7 +17,6 @@
 #include <QVBoxLayout>
 #include <QStackedWidget>
 #include <QApplication>
-#include <QScreen>
 #include <QPixmap>
 #include <QSplitter>
 
@@ -65,8 +64,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // ─── 窗口基本属性 ───
     setWindowTitle("QCanAnalyzer - CAN Bus Debug Tool");
-    qreal dpr = QApplication::primaryScreen()->devicePixelRatio();
-    resize(static_cast<int>(1280 * dpr / 2), static_cast<int>(800 * dpr / 2));
+    resize(1280, 800);
 
     // ─── 显示欢迎页 ───
     showWelcomePage();

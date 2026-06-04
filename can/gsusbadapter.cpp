@@ -191,6 +191,9 @@ bool GsUsbAdapter::sendMessage(const CanMessage &msg)
     if (msg.type == CanFrameType::ExtendedData)
         frame.can_id |= CANDLE_ID_EXTENDED;
     frame.can_dlc = msg.dlc > 64 ? 64 : msg.dlc;
+    if (msg.dlc > 64) {
+        qWarning() << "gs_usb: DLC truncated from" << msg.dlc << "to 64";
+    }
     for (uint8_t i = 0; i < frame.can_dlc; ++i)
         frame.data[i] = msg.data[i];
 

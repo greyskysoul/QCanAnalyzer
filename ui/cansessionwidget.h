@@ -29,6 +29,16 @@ class CanSessionWidget : public QWidget
     Q_OBJECT
 
 public:
+    /// 接收表格列索引
+    enum RxTableColumn {
+        ColTime = 0,
+        ColId = 1,
+        ColType = 2,
+        ColDlc = 3,
+        ColData = 4,
+        ColDir = 5
+    };
+
     explicit CanSessionWidget(int sessionId, QWidget *parent = nullptr);
     ~CanSessionWidget() override;
 
@@ -88,7 +98,7 @@ private:
     // ─── 统计 ───
     int m_rxCount = 0;
     int m_txCount = 0;
-    int m_maxTableRows = 5000;
+    int m_maxTableRows = 5000; // 最大表格行数
 };
 
 #endif // CANSESSIONWIDGET_H

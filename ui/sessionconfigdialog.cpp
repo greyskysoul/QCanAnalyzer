@@ -9,8 +9,6 @@
 
 #include <QPushButton>
 #include <QMessageBox>
-#include <QApplication>
-#include <QScreen>
 
 SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     : QDialog(parent)
@@ -19,10 +17,7 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     ui->setupUi(this);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-    qreal dpr = QApplication::primaryScreen()->devicePixelRatio();
-    int dlgW = qMax(400, qRound(460 * dpr / 2));
-    int dlgH = qMax(300, qRound(380 * dpr / 2));
-    setMinimumSize(dlgW, dlgH);
+    setMinimumSize(460, 380);
 
     // ── 适配器类型 ──
 #ifdef Q_OS_LINUX
@@ -161,17 +156,7 @@ bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCan
     adapterType = ui->adapterCombo->currentData().toInt();
     channel = ui->deviceCombo->currentData().toInt();
 
-    QString baudStr = ui->baudCombo->currentText();
-    if (baudStr == "1M")         baud = CanBaudRate::BR_1M;
-    else if (baudStr == "800K")  baud = CanBaudRate::BR_800K;
-    else if (baudStr == "250K")  baud = CanBaudRate::BR_250K;
-    else if (baudStr == "125K")  baud = CanBaudRate::BR_125K;
-    else if (baudStr == "100K")  baud = CanBaudRate::BR_100K;
-    else if (baudStr == "50K")   baud = CanBaudRate::BR_50K;
-    else if (baudStr == "20K")   baud = CanBaudRate::BR_20K;
-    else if (baudStr == "10K")   baud = CanBaudRate::BR_10K;
-    else if (baudStr == "5K")    baud = CanBaudRate::BR_5K;
-    else                         baud = CanBaudRate::BR_500K;
+    baud = baudRateFromString(ui->baudCombo->currentText());
 
     isCanFd = ui->canFdChk->isChecked();
 

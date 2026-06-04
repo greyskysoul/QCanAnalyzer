@@ -180,39 +180,41 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
     m_channel = (uint16_t)channel;
     m_opened = true;
 
-    // 启动轮询定时器
-    auto *timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, [this]() {
-        if (!m_opened || !m_Read) return;
-        TPCANMsg msg;
-        TPCANTimestamp ts;
-        uint32_t res;
-        while ((res = m_Read(m_channel, &msg, &ts)) == PCAN_ERROR_OK) {
-            CanMessage canMsg;
-            canMsg.id = msg.ID;
-            canMsg.dlc = msg.LEN;
-            canMsg.direction = CanDirection::Rx;
-            canMsg.timestamp = QDateTime::currentDateTime(); // 使用本地时间
+    // 启动轮询定时器 (复用, 避免内存泄漏)
+    if (!m_readTimer) {
+        m_readTimer = new QTimer(this);
+        connect(m_readTimer, &QTimer::timeout, this, [this]() {
+            if (!m_opened || !m_Read) return;
+            TPCANMsg msg;
+            TPCANTimestamp ts;
+            uint32_t res;
+            while ((res = m_Read(m_channel, &msg, &ts)) == PCAN_ERROR_OK) {
+                CanMessage canMsg;
+                canMsg.id = msg.ID;
+                canMsg.dlc = msg.LEN;
+                canMsg.direction = CanDirection::Rx;
+                canMsg.timestamp = QDateTime::currentDateTime(); // 使用本地时间
 
-            if (msg.MSGTYPE & PCAN_MESSAGE_EXTENDED)
-                canMsg.type = CanFrameType::ExtendedData;
-            else if (msg.MSGTYPE & PCAN_MESSAGE_RTR)
-                canMsg.type = CanFrameType::Remote;
-            else if (msg.MSGTYPE & PCAN_MESSAGE_STATUS)
-                canMsg.type = CanFrameType::Status;
-            else
-                canMsg.type = CanFrameType::StandardData;
+                if (msg.MSGTYPE & PCAN_MESSAGE_EXTENDED)
+                    canMsg.type = CanFrameType::ExtendedData;
+                else if (msg.MSGTYPE & PCAN_MESSAGE_RTR)
+                    canMsg.type = CanFrameType::Remote;
+                else if (msg.MSGTYPE & PCAN_MESSAGE_STATUS)
+                    canMsg.type = CanFrameType::Status;
+                else
+                    canMsg.type = CanFrameType::StandardData;
 
-            for (int i = 0; i < 8 && i < (int)msg.LEN; ++i)
-                canMsg.data[i] = msg.DATA[i];
+                for (int i = 0; i < 8 && i < (int)msg.LEN; ++i)
+                    canMsg.data[i] = msg.DATA[i];
 
-            emit messageReceived(canMsg);
-        }
-        if (res != PCAN_ERROR_OK && res != PCAN_ERROR_QRCVEMPTY) {
-            // 总线错误不强制关闭，只通知
-        }
-    });
-    timer->start(1); // 1ms 轮询
+                emit messageReceived(canMsg);
+            }
+            if (res != PCAN_ERROR_OK && res != PCAN_ERROR_QRCVEMPTY) {
+                // 总线错误不强制关闭，只通知
+            }
+        });
+    }
+    m_readTimer->start(1); // 1ms 轮询
     return true;
 }
 
@@ -255,6 +257,9 @@ bool PcanAdapter::sendMessage(const CanMessage &msg)
     TPCANMsg pmsg;
     pmsg.ID = msg.id;
     pmsg.LEN = msg.dlc > 8 ? 8 : msg.dlc;
+    if (msg.dlc > 8) {
+        qWarning() << "PCAN: DLC truncated from" << msg.dlc << "to 8";
+    }
     for (int i = 0; i < (int)pmsg.LEN; ++i)
         pmsg.DATA[i] = msg.data[i];
 

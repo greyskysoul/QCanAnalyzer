@@ -48,6 +48,50 @@ QList<CanDeviceInfo> SocketCanAdapter::scanDevices()
 #endif
 }
 
+bool SocketCanAdapter::open(const QString &ifName)
+{
+    Q_UNUSED(ifName);
+#ifndef Q_OS_LINUX
+    emit errorOccurred("SocketCAN 仅支持 Linux");
+    return false;
+#else
+    if (m_opened) close();
+
+    // 创建 CAN_RAW socket
+    int sock = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
+    if (sock < 0) {
+        emit errorOccurred(QString("SocketCAN: 创建 socket 失败 (%1)").arg(strerror(errno)));
+        return false;
+    }
+
+    // 绑定到指定接口
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifName.toLatin1().constData(), IFNAMSIZ - 1);
+    if (::ioctl(sock, SIOCGIFINDEX, &ifr) < 0) {
+        emit errorOccurred(QString("SocketCAN: 接口 %1 不存在").arg(ifName));
+        ::close(sock);
+        return false;
+    }
+
+    struct sockaddr_can addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.can_family = AF_CAN;
+    addr.can_ifindex = ifr.ifr_ifindex;
+
+    if (::bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        emit errorOccurred(QString("SocketCAN: 绑定 %1 失败 (%2)").arg(ifName).arg(strerror(errno)));
+        ::close(sock);
+        return false;
+    }
+
+    m_socketFd = sock;
+    m_ifName = ifName;
+    m_opened = true;
+    return true;
+#endif
+}
+
 bool SocketCanAdapter::open(int channel, CanBaudRate baud)
 {
     Q_UNUSED(channel);
@@ -57,11 +101,12 @@ bool SocketCanAdapter::open(int channel, CanBaudRate baud)
     emit errorOccurred("SocketCAN 仅支持 Linux");
     return false;
 #else
-    // SocketCAN 需要通过接口名打开（channel 参数在此不做映射）
-    // 实际使用时由调用者确保接口名正确
-    // 这里返回 true 作为占位——真正的 SocketCAN 需要知道接口名
-    m_opened = true;
-    return true;
+    // 从扫描结果中获取接口名 (channel 参数在此设计中不直接使用)
+    // 默认尝试 "can0"
+    QList<CanDeviceInfo> devices = scanDevices();
+    if (!devices.isEmpty())
+        return open(devices.first().name);
+    return open(QString("can0"));
 #endif
 }
 

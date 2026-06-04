@@ -13,6 +13,8 @@ public:
     ~SocketCanAdapter() override;
 
     QList<CanDeviceInfo> scanDevices() override;
+    /// @param ifName SocketCAN 接口名 (如 "can0", "vcan0")
+    bool open(const QString &ifName);
     bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) override;
     void close() override;
     bool isOpen() const override;
@@ -28,6 +30,7 @@ public:
 private:
     int           m_socketFd = -1;
     bool          m_opened = false;
+    QString       m_ifName;  // 当前打开的接口名
 };
 
 #endif // SOCKETCANADAPTER_H

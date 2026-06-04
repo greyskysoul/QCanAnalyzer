@@ -3,6 +3,7 @@
 
 #include "can/caninterface.h"
 #include <QLibrary>
+#include <QTimer>
 
 // ─── PCAN Basic API 常量 (与 PCANBasic.h 保持一致) ───
 
@@ -167,6 +168,7 @@ private:
     bool      m_loaded = false;
     bool      m_opened = false;
     int       m_readTimeoutMs = 1;
+    QTimer   *m_readTimer = nullptr; // 读取轮询定时器 (复用, 避免泄漏)
 
     static constexpr int kMaxChannel = 16;
 };

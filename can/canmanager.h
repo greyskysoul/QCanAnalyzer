@@ -4,6 +4,7 @@
 #include "ui/cansessionwidget.h"
 #include <QObject>
 #include <QMap>
+#include <QSet>
 
 namespace ads {
     class CDockManager;
@@ -46,11 +47,13 @@ signals:
 
 private:
     void addToExistingTabGroup(ads::CDockWidget *dockWidget);
+    bool findValidArea();
 
     ads::CDockManager   *m_dockManager;
     ads::CDockAreaWidget *m_lastArea = nullptr; // 上一个会话所在的标签区域
     QMap<int, CanSessionWidget*> m_sessions;
     QMap<int, ads::CDockWidget*> m_dockWidgets;
+    QSet<int> m_closingSessions; // 正在关闭中的会话 (防止重复删除)
     int m_nextSessionId = 1;
 };
 
