@@ -47,6 +47,7 @@ void SocketCanAdapter::readSocket()
 
         CanMessage msg;
         msg.direction = CanDirection::Rx;
+        msg.channel = m_channel;
         msg.timestamp = QDateTime::currentDateTime();
 
         if (frame.can_id & CAN_EFF_FLAG) {

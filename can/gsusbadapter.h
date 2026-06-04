@@ -25,7 +25,12 @@ public:
 
     static QString channelName(int channel);
 
+private slots:
+    void onReadTimer();
+
 private:
+    void recoverChannel(); // 尝试从 Bus-Off / 错误状态恢复通道
+
     // candle API 使用不透明指针
     void *m_devHandle = nullptr;  // candle_handle
     void *m_devList = nullptr;    // candle_list_handle
@@ -34,6 +39,13 @@ private:
     bool   m_opened = false;
     bool   m_deviceLost = false;  // 设备是否已物理断开
     QTimer *m_readTimer = nullptr; // 读取轮询定时器
+
+    // Bus-Off / 错误恢复状态
+    int    m_errorFrameCount = 0;     // 连续错误帧计数
+    int    m_maxErrorBeforeRecover = 50; // 超过此值尝试恢复
+    bool   m_recovering = false;      // 正在恢复中
+    int    m_recoverAttempt = 0;      // 恢复尝试次数
+    int    m_maxRecoverAttempts = 5;  // 最大恢复尝试次数
 };
 
 #endif // GSUSBADAPTER_H

@@ -36,7 +36,14 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
 #endif
 
     m_periodicTimer = new QTimer(this);
-    connect(m_periodicTimer, &QTimer::timeout, this, &CanSessionWidget::onSendClicked);
+    connect(m_periodicTimer, &QTimer::timeout, this, [this]() {
+        // 周期触发：按帧数发送，通过 onSendClicked 的发送/停止机制
+        onSendClicked();
+    });
+
+    m_frameTimer = new QTimer(this);
+    m_frameTimer->setSingleShot(false);
+    connect(m_frameTimer, &QTimer::timeout, this, &CanSessionWidget::onSendOneFrame);
 
     m_statusTimer = new QTimer(this);
     connect(m_statusTimer, &QTimer::timeout, this, &CanSessionWidget::onStatusCheck);
@@ -50,6 +57,7 @@ CanSessionWidget::~CanSessionWidget()
     // 因为 disconnectDevice() 会访问 UI 控件，而此时 UI 可能已部分销毁
     m_statusTimer->stop();
     m_periodicTimer->stop();
+    m_frameTimer->stop();
     if (m_can) {
         m_can->close();
     }
@@ -102,6 +110,8 @@ void CanSessionWidget::setupUi()
     ui->rxTable->horizontalHeader()->resizeSection(ColTime, qRound(130 * scale));
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColId, QHeaderView::Fixed);
     ui->rxTable->horizontalHeader()->resizeSection(ColId, qRound(90 * scale));
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColCh, QHeaderView::Fixed);
+    ui->rxTable->horizontalHeader()->resizeSection(ColCh, qRound(45 * scale));
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColType, QHeaderView::Fixed);
     ui->rxTable->horizontalHeader()->resizeSection(ColType, qRound(55 * scale));
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDlc, QHeaderView::Fixed);
@@ -124,13 +134,17 @@ void CanSessionWidget::setupUi()
     // ─── 发送面板 ───
     ui->sendIdEdit->setMaximumWidth(qRound(100 * scale));
     ui->sendTypeCombo->addItems({"标准数据帧", "扩展数据帧", "远程帧"});
-    ui->sendDlcSpin->setRange(0, 8);
+    ui->sendDlcSpin->setRange(0, 64);
     ui->sendDlcSpin->setValue(8);
     ui->sendDlcSpin->setFixedWidth(qRound(55 * scale));
-    ui->sendDataEdit->setMinimumWidth(qRound(180 * scale));
 
+    // 数据输入 — QPlainTextEdit 放在最下面，方便输入 CAN FD 数据
+    ui->sendDataEdit->setFixedHeight(qRound(56 * scale));
+    ui->sendDataEdit->setTabChangesFocus(true);
+
+    // 周期复选框：勾选时锁定周期 SpinBox，取消勾选后可修改
     connect(ui->periodicSendChk, &QCheckBox::toggled, this, [this](bool checked) {
-        ui->sendPeriodSpin->setEnabled(checked);
+        ui->sendPeriodSpin->setEnabled(!checked);
         if (checked && m_can->isOpen())
             m_periodicTimer->start(ui->sendPeriodSpin->value());
         else
@@ -138,6 +152,13 @@ void CanSessionWidget::setupUi()
     });
     ui->sendPeriodSpin->setRange(10, 10000);
     ui->sendPeriodSpin->setValue(1000);
+
+    // 帧数 SpinBox
+    ui->sendFrameCountSpin->setMinimum(1);
+    ui->sendFrameCountSpin->setMaximum(999999);
+    ui->sendFrameCountSpin->setValue(1);
+    ui->sendFrameCountSpin->setFixedWidth(qRound(70 * scale));
+
     connect(ui->sendPeriodSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
         if (m_periodicTimer->isActive())
             m_periodicTimer->setInterval(val);
@@ -223,6 +244,7 @@ void CanSessionWidget::disconnectDevice()
 {
     m_statusTimer->stop();
     m_periodicTimer->stop();
+    stopSending();  // 停止逐帧发送
     m_can->close();
     updateUiState(false);
 }
@@ -248,6 +270,7 @@ void CanSessionWidget::onStatusCheck()
     if (!m_can->isAlive()) {
         m_statusTimer->stop();
         m_periodicTimer->stop();
+        stopSending();
         m_can->close();
         updateUiState(false);
 
@@ -341,35 +364,134 @@ void CanSessionWidget::onSendClicked()
 {
     if (!m_can->isOpen()) return;
 
-    CanMessage msg;
-    msg.direction = CanDirection::Tx;
-    msg.timestamp = QDateTime::currentDateTime();
+    // ── 如果正在发送 → 停止 ──
+    if (m_sending) {
+        stopSending();
+        return;
+    }
+
+    // ── 开始发送 ──
+
+    // 解析 16 进制数据（仅允许 0-9, A-F, a-f, 空格）
+    QString dataStr = ui->sendDataEdit->toPlainText().trimmed();
+    QString filtered;
+    for (const QChar &ch : dataStr) {
+        if (ch.isSpace() || (ch >= '0' && ch <= '9') ||
+            (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f')) {
+            filtered += ch;
+        }
+    }
+    if (filtered != dataStr) {
+        ui->sendDataEdit->setPlainText(filtered);
+        dataStr = filtered;
+    }
+
+    QStringList bytes = dataStr.split(' ', Qt::SkipEmptyParts);
+
+    m_pendingMsg = CanMessage();
+    m_pendingMsg.direction = CanDirection::Tx;
 
     QString idText = ui->sendIdEdit->text().trimmed();
     bool ok = false;
     if (idText.startsWith("0x", Qt::CaseInsensitive))
-        msg.id = idText.mid(2).toUInt(&ok, 16);
+        m_pendingMsg.id = idText.mid(2).toUInt(&ok, 16);
     else
-        msg.id = idText.toUInt(&ok, 16);
-    if (!ok) { msg.id = 0x123; }
+        m_pendingMsg.id = idText.toUInt(&ok, 16);
+    if (!ok) { m_pendingMsg.id = 0x123; }
 
     int typeIdx = ui->sendTypeCombo->currentIndex();
-    if (typeIdx == 0) msg.type = CanFrameType::StandardData;
-    else if (typeIdx == 1) msg.type = CanFrameType::ExtendedData;
-    else msg.type = CanFrameType::Remote;
+    if (typeIdx == 0) m_pendingMsg.type = CanFrameType::StandardData;
+    else if (typeIdx == 1) m_pendingMsg.type = CanFrameType::ExtendedData;
+    else m_pendingMsg.type = CanFrameType::Remote;
 
-    msg.dlc = static_cast<uint8_t>(ui->sendDlcSpin->value());
-
-    QString dataStr = ui->sendDataEdit->text().trimmed();
-    QStringList bytes = dataStr.split(' ', Qt::SkipEmptyParts);
-    for (int i = 0; i < bytes.size() && i < 8; ++i) {
-        msg.data[i] = static_cast<uint8_t>(bytes[i].toUInt(&ok, 16));
-        if (!ok) msg.data[i] = 0;
+    int dlcVal = qMin(bytes.size(), 64);
+    m_pendingMsg.dlc = static_cast<uint8_t>(qMax(dlcVal, ui->sendDlcSpin->value()));
+    if (dlcVal > 0) {
+        m_pendingMsg.dlc = static_cast<uint8_t>(dlcVal);
     }
 
-    if (m_can->sendMessage(msg)) {
+    int dataLen = qMin(bytes.size(), 64);
+    for (int i = 0; i < dataLen; ++i) {
+        m_pendingMsg.data[i] = static_cast<uint8_t>(bytes[i].toUInt(&ok, 16));
+        if (!ok) m_pendingMsg.data[i] = 0;
+    }
+
+    // 设置发送状态
+    m_frameRemaining = ui->sendFrameCountSpin->value();
+    m_sending = true;
+
+    // UI：按钮变"停止"
+    updateSendButtonState(true);
+
+    // 启动逐帧发送定时器（1ms 间隔，让事件循环可以响应停止）
+    m_frameTimer->start(1);
+}
+
+void CanSessionWidget::onSendOneFrame()
+{
+    if (!m_sending || m_frameRemaining <= 0 || !m_can->isOpen()) {
+        stopSending();
+        return;
+    }
+
+    m_pendingMsg.timestamp = QDateTime::currentDateTime();
+
+    if (m_can->sendMessage(m_pendingMsg)) {
         m_txCount++;
-        addMessageToTable(msg);
+        addMessageToTable(m_pendingMsg);
+    }
+
+    m_frameRemaining--;
+
+    if (m_frameRemaining <= 0) {
+        stopSending();
+    }
+}
+
+void CanSessionWidget::stopSending()
+{
+    m_frameTimer->stop();
+    m_sending = false;
+    m_frameRemaining = 0;
+    updateSendButtonState(false);
+}
+
+void CanSessionWidget::updateSendButtonState(bool sending)
+{
+    const qreal scale = QApplication::primaryScreen()->devicePixelRatio();
+    const QString btnStyle = QStringLiteral(
+        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; }");
+
+    if (sending) {
+        const QString redBtn = btnStyle +
+            "QPushButton { background-color: #f44336; color: white; }"
+            "QPushButton:hover { background-color: #d32f2f; }";
+        ui->sendBtn->setText("停止");
+        ui->sendBtn->setStyleSheet(redBtn);
+        ui->sendBtn->setFixedWidth(qRound(80 * scale));
+        // 发送期间禁用参数编辑
+        ui->sendIdEdit->setEnabled(false);
+        ui->sendTypeCombo->setEnabled(false);
+        ui->sendDlcSpin->setEnabled(false);
+        ui->sendDataEdit->setEnabled(false);
+        ui->sendFrameCountSpin->setEnabled(false);
+        ui->periodicSendChk->setEnabled(false);
+    } else {
+        const QString blueBtn = btnStyle +
+            "QPushButton { background-color: #2196F3; color: white; }"
+            "QPushButton:hover { background-color: #0b7dda; }";
+        ui->sendBtn->setText("发送");
+        ui->sendBtn->setStyleSheet(blueBtn);
+        ui->sendBtn->setFixedWidth(qRound(80 * scale));
+        // 恢复参数编辑
+        ui->sendIdEdit->setEnabled(true);
+        ui->sendTypeCombo->setEnabled(true);
+        ui->sendDlcSpin->setEnabled(true);
+        ui->sendDataEdit->setEnabled(true);
+        ui->sendFrameCountSpin->setEnabled(true);
+        ui->periodicSendChk->setEnabled(true);
+        // 同步周期状态
+        ui->sendPeriodSpin->setEnabled(!ui->periodicSendChk->isChecked());
     }
 }
 
@@ -400,7 +522,7 @@ void CanSessionWidget::onSaveClicked()
     out.setCodec("UTF-8");
     out << QChar(0xFEFF);
 
-    out << "时间,ID,类型,DLC,数据,方向\n";
+    out << "时间,ID,通道,类型,DLC,数据,方向\n";
 
     for (int row = 0; row < ui->rxTable->rowCount(); ++row) {
         for (int col = 0; col < ui->rxTable->columnCount(); ++col) {
@@ -448,6 +570,10 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
     if (msg.type == CanFrameType::ExtendedData)
         idItem->setForeground(QColor("#E91E63"));
     ui->rxTable->setItem(row, ColId, idItem);
+
+    auto *chItem = new QTableWidgetItem(QString::number(msg.channel));
+    chItem->setTextAlignment(Qt::AlignCenter);
+    ui->rxTable->setItem(row, ColCh, chItem);
 
     auto *typeItem = new QTableWidgetItem(msg.typeString());
     typeItem->setTextAlignment(Qt::AlignCenter);

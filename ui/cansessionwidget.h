@@ -9,6 +9,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QGroupBox>
@@ -33,10 +34,11 @@ public:
     enum RxTableColumn {
         ColTime = 0,
         ColId = 1,
-        ColType = 2,
-        ColDlc = 3,
-        ColData = 4,
-        ColDir = 5
+        ColCh = 2,     // 通道
+        ColType = 3,
+        ColDlc = 4,
+        ColData = 5,
+        ColDir = 6
     };
 
     explicit CanSessionWidget(int sessionId, QWidget *parent = nullptr);
@@ -63,6 +65,7 @@ signals:
 private slots:
     void onConnectClicked();
     void onSendClicked();
+    void onSendOneFrame();
     void onClearClicked();
     void onSaveClicked();
     void onMessageReceived(const CanMessage &msg);
@@ -75,6 +78,8 @@ private:
     void updateChannelCheckboxes();
     void onStatusCheck();
     void updateUiState(bool connected);
+    void stopSending();
+    void updateSendButtonState(bool sending);
 
     Ui::CanSessionWidget *ui;
 
@@ -86,6 +91,12 @@ private:
     // ─── 定时器 ───
     QTimer      *m_periodicTimer = nullptr;
     QTimer      *m_statusTimer = nullptr;
+    QTimer      *m_frameTimer = nullptr;   // 逐帧发送定时器
+
+    // ─── 发送状态 ───
+    int          m_frameRemaining = 0;     // 剩余待发送帧数
+    bool         m_sending = false;        // 是否正在发送
+    CanMessage   m_pendingMsg;             // 待发送的消息模板
 
     // ─── CAN 接口 ───
     CanInterface *m_can = nullptr;

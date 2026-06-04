@@ -97,7 +97,7 @@
    <item>
     <widget class="QLabel" name="descLabel">
      <property name="text">
-      <string>支持 PCAN 系列设备  ·  多会话同时工作  ·  报文实时分析</string>
+      <string>PCAN · gs_usb (candleLight) · SocketCAN  ｜  多通道识别  ｜  CAN-FD 数据  ｜  周期/帧数发送可打断</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>

@@ -193,6 +193,7 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
                 canMsg.id = msg.ID;
                 canMsg.dlc = msg.LEN;
                 canMsg.direction = CanDirection::Rx;
+                canMsg.channel = m_channel;
                 canMsg.timestamp = QDateTime::currentDateTime(); // 使用本地时间
 
                 if (msg.MSGTYPE & PCAN_MESSAGE_EXTENDED)
@@ -210,7 +211,19 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
                 emit messageReceived(canMsg);
             }
             if (res != PCAN_ERROR_OK && res != PCAN_ERROR_QRCVEMPTY) {
-                // 总线错误不强制关闭，只通知
+                // 总线错误日志
+                if (res & PCAN_ERROR_BUSOFF) {
+                    qWarning() << "PCAN: Bus-Off detected on channel" << m_channel;
+                } else if (res & PCAN_ERROR_BUSHEAVY) {
+                    qWarning() << "PCAN: Bus-Heavy warning on channel" << m_channel;
+                } else if (res & PCAN_ERROR_BUSLIGHT) {
+                    // Bus-Light: 轻度总线负载警告，静默处理
+                }
+                if (res == PCAN_ERROR_OVERRUN) {
+                    qWarning() << "PCAN: Receive overrun on channel" << m_channel;
+                } else if (res == PCAN_ERROR_QOVERRUN) {
+                    qWarning() << "PCAN: Queue overrun on channel" << m_channel;
+                }
             }
         });
     }
