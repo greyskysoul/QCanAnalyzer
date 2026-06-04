@@ -64,7 +64,13 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
 
 CanSessionWidget::~CanSessionWidget()
 {
-    disconnectDevice();
+    // 析构时直接清理资源，不调用 disconnectDevice()
+    // 因为 disconnectDevice() 会访问 UI 控件，而此时 UI 可能已部分销毁
+    m_statusTimer->stop();
+    m_periodicTimer->stop();
+    if (m_can) {
+        m_can->close();
+    }
     delete ui;
 }
 
@@ -80,7 +86,6 @@ void CanSessionWidget::linkSignals(CanInterface *iface)
         ui->statusLabel->setToolTip(err);
         ui->statusLabel->setStyleSheet("color:orange; font-weight:bold;");
     });
-    disconnectDevice();
 }
 
 void CanSessionWidget::setupUi()
@@ -343,7 +348,7 @@ void CanSessionWidget::onConnectClicked()
         return;
     }
 
-    if (m_currentChannel > 0) {
+    if (m_currentChannel >= 0) {
         QString baudStr = ui->baudCombo->currentText();
         CanBaudRate baud = CanBaudRate::BR_500K;
         if (baudStr == "1M")    baud = CanBaudRate::BR_1M;
@@ -356,7 +361,7 @@ void CanSessionWidget::onConnectClicked()
         else if (baudStr == "10K")   baud = CanBaudRate::BR_10K;
         else if (baudStr == "5K")    baud = CanBaudRate::BR_5K;
 
-        connectDevice(m_currentChannel, baud);
+        connectDevice(m_currentChannel, baud, m_adapterType);
     }
 }
 

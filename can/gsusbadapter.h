@@ -3,6 +3,8 @@
 
 #include "can/caninterface.h"
 
+class QTimer;
+
 /// gs_usb CAN 适配器 (candleLight / gs_usb 开源固件设备)
 /// 使用 candle API (来自 cangaroo 项目) 进行静态链接
 class GsUsbAdapter : public CanInterface
@@ -29,6 +31,8 @@ private:
     void *m_devList = nullptr;    // candle_list_handle
     int    m_channelCount = 0;
     bool   m_opened = false;
+    bool   m_deviceLost = false;  // 设备是否已物理断开
+    QTimer *m_readTimer = nullptr; // 读取轮询定时器
 };
 
 #endif // GSUSBADAPTER_H

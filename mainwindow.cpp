@@ -8,6 +8,7 @@
 #include <DockWidget.h>
 #include <DockAreaWidget.h>
 #include <DockContainerWidget.h>
+#include <DockSplitter.h>
 
 #include <QMenuBar>
 #include <QStatusBar>
@@ -73,6 +74,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    // 先清理 CAN 管理器（关闭所有会话、停止定时器），再删除 UI
+    delete m_canManager;
+    m_canManager = nullptr;
     delete ui;
 }
 
@@ -145,20 +149,36 @@ void MainWindow::setupMenuBar()
     QAction *tileHAct = new QAction("水平平铺", this);
     connect(tileHAct, &QAction::triggered, this, [this]() {
         QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
-        if (areas.size() < 2) return;
+        // 需要至少 2 个 dock widget 才能拆分
+        int totalDocks = 0;
+        for (auto *a : areas) totalDocks += a->dockWidgets().size();
+        if (totalDocks < 2) return;
 
-        // 将所有 dock area 合并到第一个，然后用 splitDockArea 水平拆分
-        ads::CDockAreaWidget *first = areas.first();
-        for (int i = 1; i < areas.size(); ++i) {
-            auto docks = areas[i]->dockWidgets();
-            for (auto *dw : docks)
-                m_dockManager->addDockWidgetTabToArea(dw, first);
+        // 先收集所有 dock widget
+        QList<ads::CDockWidget*> allDocks;
+        for (auto *a : areas) {
+            allDocks.append(a->dockWidgets());
         }
-        // 按数量水平拆分：逐个从 first 中拆分出新的 area
-        for (int i = 1; i < areas.size(); ++i) {
-            auto *firstDock = first->dockWidgets().first();
-            first = m_dockManager->addDockWidget(
-                ads::CenterDockWidgetArea, firstDock, first->currentDockContainer());
+
+        // 将第一个放在中心，其余水平拆分
+        ads::CDockAreaWidget *targetArea = areas.first();
+        // 把第一个 dock 作为锚点，其余 dock 移到新 area
+        for (int i = 1; i < allDocks.size(); ++i) {
+            targetArea = m_dockManager->addDockWidget(
+                ads::RightDockWidgetArea, allDocks[i], targetArea);
+        }
+
+        // 均分宽度
+        auto *splitter = targetArea->parentSplitter();
+        if (splitter) {
+            int count = splitter->count();
+            int total = splitter->orientation() == Qt::Horizontal
+                ? splitter->width() : splitter->height();
+            QList<int> sizes;
+            int each = total / count;
+            for (int i = 0; i < count; ++i)
+                sizes.append(each);
+            splitter->setSizes(sizes);
         }
     });
     windowMenu->addAction(tileHAct);
@@ -166,19 +186,32 @@ void MainWindow::setupMenuBar()
     QAction *tileVAct = new QAction("垂直平铺", this);
     connect(tileVAct, &QAction::triggered, this, [this]() {
         QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
-        if (areas.size() < 2) return;
+        int totalDocks = 0;
+        for (auto *a : areas) totalDocks += a->dockWidgets().size();
+        if (totalDocks < 2) return;
 
-        ads::CDockAreaWidget *first = areas.first();
-        for (int i = 1; i < areas.size(); ++i) {
-            auto docks = areas[i]->dockWidgets();
-            for (auto *dw : docks)
-                m_dockManager->addDockWidgetTabToArea(dw, first);
+        QList<ads::CDockWidget*> allDocks;
+        for (auto *a : areas) {
+            allDocks.append(a->dockWidgets());
         }
-        // 按数量垂直拆分
-        for (int i = 1; i < areas.size(); ++i) {
-            auto *firstDock = first->dockWidgets().first();
-            first = m_dockManager->addDockWidget(
-                ads::BottomDockWidgetArea, firstDock, first->currentDockContainer());
+
+        ads::CDockAreaWidget *targetArea = areas.first();
+        for (int i = 1; i < allDocks.size(); ++i) {
+            targetArea = m_dockManager->addDockWidget(
+                ads::BottomDockWidgetArea, allDocks[i], targetArea);
+        }
+
+        // 均分高度
+        auto *splitter = targetArea->parentSplitter();
+        if (splitter) {
+            int count = splitter->count();
+            int total = splitter->orientation() == Qt::Horizontal
+                ? splitter->width() : splitter->height();
+            QList<int> sizes;
+            int each = total / count;
+            for (int i = 0; i < count; ++i)
+                sizes.append(each);
+            splitter->setSizes(sizes);
         }
     });
     windowMenu->addAction(tileVAct);

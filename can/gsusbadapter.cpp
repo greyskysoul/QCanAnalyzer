@@ -15,6 +15,11 @@ GsUsbAdapter::GsUsbAdapter(QObject *parent)
 
 GsUsbAdapter::~GsUsbAdapter()
 {
+    if (m_readTimer) {
+        m_readTimer->stop();
+        delete m_readTimer;
+        m_readTimer = nullptr;
+    }
     close();
 }
 
@@ -117,10 +122,16 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
     m_devList = list;
     m_channelCount = 1;
     m_opened = true;
+    m_deviceLost = false;
 
-    // 读取线程
-    auto *timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, [this, ch]() {
+    // 读取定时器 — 先停止并删除旧的，再创建新的
+    if (m_readTimer) {
+        m_readTimer->stop();
+        delete m_readTimer;
+        m_readTimer = nullptr;
+    }
+    m_readTimer = new QTimer(this);
+    connect(m_readTimer, &QTimer::timeout, this, [this, ch]() {
         if (!m_opened || !m_devHandle) return;
         candle_frame_t frame;
         while (candle_frame_read(static_cast<candle_handle>(m_devHandle), &frame, 0)) {
@@ -141,14 +152,17 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
             }
         }
     });
-    timer->start(1);
+    m_readTimer->start(1);
 
     return true;
 }
 
 void GsUsbAdapter::close()
 {
-    if (!m_opened) return;
+    // 先停止读取定时器
+    if (m_readTimer) {
+        m_readTimer->stop();
+    }
 
     if (m_devHandle) {
         candle_dev_close(static_cast<candle_handle>(m_devHandle));
@@ -160,6 +174,7 @@ void GsUsbAdapter::close()
         m_devList = nullptr;
     }
     m_opened = false;
+    m_deviceLost = false;
 }
 
 bool GsUsbAdapter::isOpen() const
@@ -185,7 +200,20 @@ bool GsUsbAdapter::sendMessage(const CanMessage &msg)
 
 bool GsUsbAdapter::isAlive() const
 {
-    return m_opened;
+    if (!m_opened || !m_devHandle) return false;
+    if (m_deviceLost) return false;
+
+    // 通过尝试获取设备时间戳来检测设备是否存活
+    // 设备拔出时 candle_dev_get_timestamp_us 会失败
+    uint32_t ts = 0;
+    if (!candle_dev_get_timestamp_us(static_cast<candle_handle>(m_devHandle), &ts)) {
+        candle_err_t err = candle_dev_last_error(static_cast<candle_handle>(m_devHandle));
+        if (err != CANDLE_ERR_OK) {
+            const_cast<GsUsbAdapter*>(this)->m_deviceLost = true;
+            return false;
+        }
+    }
+    return true;
 }
 
 QString GsUsbAdapter::channelName(int channel)
