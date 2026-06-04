@@ -24,7 +24,7 @@ public:
 
     /// 运行对话框，返回 true 表示用户点击了确定
     bool configure(int &channel, CanBaudRate &baud, bool &isCanFd,
-                   CanBaudRate &dataBaud, int &adapterType);
+                   CanBaudRate &dataBaud, int &adapterType, QString &deviceName);
 
 private slots:
     void onCanFdToggled(bool checked);

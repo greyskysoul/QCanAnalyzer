@@ -148,13 +148,14 @@ void SessionConfigDialog::onCanFdToggled(bool checked)
 }
 
 bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCanFd,
-                                    CanBaudRate &dataBaud, int &adapterType)
+                                    CanBaudRate &dataBaud, int &adapterType, QString &deviceName)
 {
     if (exec() != QDialog::Accepted)
         return false;
 
     adapterType = ui->adapterCombo->currentData().toInt();
     channel = ui->deviceCombo->currentData().toInt();
+    deviceName = ui->deviceCombo->currentText().section("  [", 0, 0).trimmed();
 
     baud = baudRateFromString(ui->baudCombo->currentText());
 

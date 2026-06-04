@@ -3,6 +3,8 @@
 
 #include "can/caninterface.h"
 
+class QSocketNotifier;
+
 /// SocketCAN 适配器 (Linux 内核 CAN 子系统)
 class SocketCanAdapter : public CanInterface
 {
@@ -27,10 +29,15 @@ public:
     /// SocketCAN 不支持软件设置波特率
     bool supportsBaudConfig() const { return false; }
 
+private slots:
+    /// QSocketNotifier 激活时读取 CAN 帧
+    void readSocket();
+
 private:
-    int           m_socketFd = -1;
-    bool          m_opened = false;
-    QString       m_ifName;  // 当前打开的接口名
+    int              m_socketFd = -1;
+    bool             m_opened = false;
+    QString          m_ifName;              // 当前打开的接口名
+    QSocketNotifier *m_notifier = nullptr;  // 监听 socket fd 可读事件
 };
 
 #endif // SOCKETCANADAPTER_H

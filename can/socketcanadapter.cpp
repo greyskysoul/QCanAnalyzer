@@ -1,6 +1,6 @@
 #include "socketcanadapter.h"
 #include <QDebug>
-#include <QTimer>
+#include <QSocketNotifier>
 #include <QDateTime>
 #include <QDir>
 #include <QMessageBox>
@@ -23,6 +23,52 @@ SocketCanAdapter::SocketCanAdapter(QObject *parent)
 SocketCanAdapter::~SocketCanAdapter()
 {
     close();
+}
+
+void SocketCanAdapter::readSocket()
+{
+#ifdef Q_OS_LINUX
+    if (m_socketFd < 0) return;
+
+    struct can_frame frame;
+    // 限制单次读取帧数，避免在高负载下长时间占用事件循环
+    for (int i = 0; i < 64; ++i) {
+        ssize_t n = ::read(m_socketFd, &frame, sizeof(frame));
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break; // 没有更多数据
+            emit errorOccurred(QString("SocketCAN: 读取错误 (%1)").arg(strerror(errno)));
+            break;
+        }
+        if (n != CAN_MTU && n != CANFD_MTU) {
+            qWarning() << "SocketCAN: 收到异常帧大小" << n;
+            break;
+        }
+
+        CanMessage msg;
+        msg.direction = CanDirection::Rx;
+        msg.timestamp = QDateTime::currentDateTime();
+
+        if (frame.can_id & CAN_EFF_FLAG) {
+            msg.type = CanFrameType::ExtendedData;
+            msg.id = frame.can_id & CAN_EFF_MASK;
+        } else {
+            msg.type = CanFrameType::StandardData;
+            msg.id = frame.can_id & CAN_SFF_MASK;
+        }
+
+        if (frame.can_id & CAN_RTR_FLAG)
+            msg.type = CanFrameType::Remote;
+        if (frame.can_id & CAN_ERR_FLAG)
+            msg.type = CanFrameType::Error;
+
+        msg.dlc = frame.can_dlc > 8 ? 8 : frame.can_dlc;
+        for (int i = 0; i < msg.dlc && i < 8; ++i)
+            msg.data[i] = frame.data[i];
+
+        emit messageReceived(msg);
+    }
+#endif
 }
 
 QList<CanDeviceInfo> SocketCanAdapter::scanDevices()
@@ -88,6 +134,16 @@ bool SocketCanAdapter::open(const QString &ifName)
     m_socketFd = sock;
     m_ifName = ifName;
     m_opened = true;
+
+    // 设置非阻塞模式，避免 readSocket() 阻塞事件循环
+    int flags = ::fcntl(sock, F_GETFL, 0);
+    if (flags >= 0)
+        ::fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+
+    // 使用 QSocketNotifier 异步监听 CAN 帧
+    m_notifier = new QSocketNotifier(sock, QSocketNotifier::Read, this);
+    connect(m_notifier, &QSocketNotifier::activated, this, &SocketCanAdapter::readSocket);
+
     return true;
 #endif
 }
@@ -113,6 +169,12 @@ bool SocketCanAdapter::open(int channel, CanBaudRate baud)
 void SocketCanAdapter::close()
 {
 #ifdef Q_OS_LINUX
+    // 先删除 notifier（必须在 close fd 之前）
+    if (m_notifier) {
+        m_notifier->setEnabled(false);
+        delete m_notifier;
+        m_notifier = nullptr;
+    }
     if (m_socketFd >= 0) {
         ::close(m_socketFd);
         m_socketFd = -1;

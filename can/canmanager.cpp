@@ -24,7 +24,8 @@ CanManager::~CanManager()
 }
 
 CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
-                                            bool isCanFd, int adapterType)
+                                            bool isCanFd, int adapterType,
+                                            const QString &deviceName)
 {
     Q_UNUSED(isCanFd)
 
@@ -41,7 +42,7 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
     case CanAdapterType::GsUsb:    devName = GsUsbAdapter::channelName(channel); break;
 #endif
 #ifdef Q_OS_LINUX
-    case CanAdapterType::SocketCAN:devName = SocketCanAdapter::channelName(channel); break;
+    case CanAdapterType::SocketCAN:devName = deviceName.isEmpty() ? QString("can0") : deviceName; break;
 #endif
     default: devName = QString("CAN-%1").arg(channel);
     }

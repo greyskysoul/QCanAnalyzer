@@ -115,12 +115,98 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
     case CanBaudRate::BR_5K:   bitrate = 5000;    break;
     default: break;
     }
-    candle_channel_set_bitrate(hdev, ch, bitrate);
-    candle_channel_start(hdev, ch, 0);
+    // 设置波特率 — 优先使用简单API，失败则用 bittiming 方式
+    qDebug() << "gs_usb: setting bitrate" << bitrate << "for channel" << ch;
+    bool bitrateOk = candle_channel_set_bitrate(hdev, ch, bitrate);
+    if (!bitrateOk) {
+        candle_err_t err = candle_dev_last_error(hdev);
+        qWarning() << "gs_usb: candle_channel_set_bitrate failed, err=" << (int)err
+                   << "— falling back to bittiming";
+
+        // 获取设备能力
+        candle_capability_t caps;
+        if (!candle_channel_get_capabilities(hdev, ch, &caps)) {
+            candle_dev_free(hdev);
+            candle_list_free(list);
+            emit errorOccurred("gs_usb: 无法获取设备能力");
+            return false;
+        }
+
+        qDebug() << "gs_usb: fclk_can=" << caps.fclk_can
+                 << "tseg1=[" << caps.tseg1_min << "," << caps.tseg1_max << "]"
+                 << "tseg2=[" << caps.tseg2_min << "," << caps.tseg2_max << "]"
+                 << "sjw_max=" << caps.sjw_max
+                 << "brp=[" << caps.brp_min << "," << caps.brp_max << "]";
+
+        // 遍历寻找合适的 bittiming（采样点 70%~87.5%）
+        candle_bittiming_t best = {};
+        bool found = false;
+
+        for (uint32_t brp = caps.brp_min; brp <= caps.brp_max && !found; brp += caps.brp_inc) {
+            uint32_t tq_total = caps.fclk_can / (brp * bitrate);
+            if (tq_total < 4 || tq_total > 25) continue; // CAN 规范: 最小 4TQ, 最大 25TQ
+
+            // tq_total = 1 + tseg1 + tseg2 (prop_seg 已合并到 tseg1)
+            for (uint32_t tseg2 = caps.tseg2_min; tseg2 <= caps.tseg2_max && tseg2 < tq_total; tseg2++) {
+                uint32_t tseg1 = tq_total - 1 - tseg2;
+                if (tseg1 < caps.tseg1_min || tseg1 > caps.tseg1_max) continue;
+
+                // 采样点 = (1 + tseg1) / tq_total, 目标 70%~87.5%
+                uint32_t sp = (1 + tseg1) * 1000 / tq_total;
+                if (sp >= 700 && sp <= 875) {
+                    best.prop_seg = 1;
+                    best.phase_seg1 = tseg1 - 1; // tseg1 = prop_seg + phase_seg1
+                    best.phase_seg2 = tseg2;
+                    best.sjw = (caps.sjw_max < tseg2) ? caps.sjw_max : tseg2;
+                    best.brp = brp;
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if (!found) {
+            candle_dev_free(hdev);
+            candle_list_free(list);
+            emit errorOccurred(QString("gs_usb: 无法为 bitrate=%1 找到合适的 bittiming (fclk=%2)")
+                               .arg(bitrate).arg(caps.fclk_can));
+            return false;
+        }
+
+        qDebug() << "gs_usb: bittiming brp=" << best.brp
+                 << "prop=" << best.prop_seg
+                 << "ps1=" << best.phase_seg1
+                 << "ps2=" << best.phase_seg2
+                 << "sjw=" << best.sjw;
+
+        if (!candle_channel_set_timing(hdev, ch, &best)) {
+            candle_err_t err2 = candle_dev_last_error(hdev);
+            candle_dev_free(hdev);
+            candle_list_free(list);
+            emit errorOccurred(QString("gs_usb: 设置 bittiming 失败 (err=%1)").arg(static_cast<int>(err2)));
+            return false;
+        }
+        qDebug() << "gs_usb: bittiming set OK";
+    } else {
+        qDebug() << "gs_usb: bitrate set OK via simple API";
+    }
+
+    // 普通模式启动 CAN 通道（需要总线至少两个节点才能正常 ACK）
+    uint32_t flags = 0;
+    qDebug() << "gs_usb: starting channel" << ch << "flags=0x" << Qt::hex << flags;
+    if (!candle_channel_start(hdev, ch, flags)) {
+        candle_err_t err = candle_dev_last_error(hdev);
+        candle_dev_free(hdev);
+        candle_list_free(list);
+        emit errorOccurred(QString("gs_usb: 启动通道失败 (err=%1)").arg(static_cast<int>(err)));
+        return false;
+    }
+    qDebug() << "gs_usb: channel started OK";
 
     m_devHandle = hdev;
     m_devList = list;
     m_channelCount = 1;
+    m_channelIndex = ch;
     m_opened = true;
     m_deviceLost = false;
 
@@ -190,15 +276,31 @@ bool GsUsbAdapter::sendMessage(const CanMessage &msg)
     frame.can_id = msg.id;
     if (msg.type == CanFrameType::ExtendedData)
         frame.can_id |= CANDLE_ID_EXTENDED;
-    frame.can_dlc = msg.dlc > 64 ? 64 : msg.dlc;
-    if (msg.dlc > 64) {
-        qWarning() << "gs_usb: DLC truncated from" << msg.dlc << "to 64";
+    else if (msg.type == CanFrameType::Remote)
+        frame.can_id |= CANDLE_ID_RTR;
+    frame.can_dlc = msg.dlc > 8 ? 8 : msg.dlc;
+    if (msg.dlc > 8) {
+        qWarning() << "gs_usb: DLC truncated from" << msg.dlc << "to 8";
     }
     for (uint8_t i = 0; i < frame.can_dlc; ++i)
         frame.data[i] = msg.data[i];
 
-    return candle_frame_send(static_cast<candle_handle>(m_devHandle),
-                             0, &frame);
+    // 调试: 打印发送的原始帧数据
+    uint8_t *raw = (uint8_t*)&frame;
+    QString hex;
+    for (int i = 0; i < 24; ++i)
+        hex += QString("%1 ").arg(raw[i], 2, 16, QChar('0'));
+    qDebug() << "gs_usb TX raw[24]:" << hex.trimmed();
+
+    bool ret = candle_frame_send(static_cast<candle_handle>(m_devHandle),
+                                 m_channelIndex, &frame);
+    if (!ret) {
+        candle_err_t err = candle_dev_last_error(static_cast<candle_handle>(m_devHandle));
+        emit errorOccurred(QString("gs_usb 发送失败: %1").arg(static_cast<int>(err)));
+    } else {
+        qDebug() << "gs_usb: candle_frame_send OK, channel=" << m_channelIndex;
+    }
+    return ret;
 }
 
 bool GsUsbAdapter::isAlive() const

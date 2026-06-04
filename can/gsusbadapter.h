@@ -30,6 +30,7 @@ private:
     void *m_devHandle = nullptr;  // candle_handle
     void *m_devList = nullptr;    // candle_list_handle
     int    m_channelCount = 0;
+    uint8_t m_channelIndex = 0;   // 当前打开的通道号
     bool   m_opened = false;
     bool   m_deviceLost = false;  // 设备是否已物理断开
     QTimer *m_readTimer = nullptr; // 读取轮询定时器
