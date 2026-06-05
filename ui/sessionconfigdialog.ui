@@ -94,7 +94,7 @@
      <item row="2" column="0">
       <widget class="QLabel" name="baudLabel">
        <property name="text">
-        <string>仲裁域波特率:</string>
+        <string>波特率:</string>
        </property>
       </widget>
      </item>

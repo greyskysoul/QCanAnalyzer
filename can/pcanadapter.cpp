@@ -192,6 +192,7 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
                 CanMessage canMsg;
                 canMsg.id = msg.ID;
                 canMsg.dlc = msg.LEN;
+                canMsg.isFd = false; // PCAN Basic API 不支持 CAN FD
                 canMsg.direction = CanDirection::Rx;
                 canMsg.channel = m_channel & 0x0F;  // 逻辑通道号
                 canMsg.timestamp = QDateTime::currentDateTime(); // 使用本地时间

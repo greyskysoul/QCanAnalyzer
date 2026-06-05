@@ -272,7 +272,7 @@ void MainWindow::onNewSession()
     if (!m_canManager->hasSessions())
         hideWelcomePage();
 
-    m_canManager->createSession(channel, baud, isCanFd, adapterType, deviceName);
+    m_canManager->createSession(channel, baud, isCanFd, adapterType, deviceName, dataBaud);
     statusBar()->showMessage(
         QString("已创建会话 — 当前共 %1 个会话").arg(m_canManager->sessionCount()), 3000);
 }

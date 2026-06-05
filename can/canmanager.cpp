@@ -25,13 +25,19 @@ CanManager::~CanManager()
 
 CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
                                             bool isCanFd, int adapterType,
-                                            const QString &deviceName)
+                                            const QString &deviceName,
+                                            CanBaudRate dataBaud)
 {
-    Q_UNUSED(isCanFd)
+    Q_UNUSED(dataBaud)
 
     int id = m_nextSessionId++;
 
     auto *widget = new CanSessionWidget(id);
+    widget->setCanFdEnabled(isCanFd);
+    // 同步波特率到标签页 UI
+    widget->setBaudRateText(baudRateString(baud));
+    if (isCanFd)
+        widget->setDataBaudRateText(baudRateString(dataBaud));
     m_sessions[id] = widget;
 
     // 标签名根据适配器类型
@@ -46,7 +52,7 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
 #endif
     default: devName = QString("CAN-%1").arg(channel);
     }
-    QString title = QString("%1 @ %2").arg(devName).arg(baudRateString(baud));
+    QString title = QString("%1").arg(devName);
 
     // 创建停靠窗口
     auto *dockWidget = new ads::CDockWidget(m_dockManager, title);

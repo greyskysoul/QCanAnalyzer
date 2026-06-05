@@ -6,6 +6,9 @@
 #else
 #include "can/socketcanadapter.h"
 #endif
+#ifdef QT_DEBUG
+#include "can/mockcanadapter.h"
+#endif
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -16,6 +19,7 @@
 #include <QTextStream>
 #include <QDateTime>
 #include <QFont>
+#include "qhexedit.h"
 
 CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
     : QWidget(parent)
@@ -91,6 +95,11 @@ void CanSessionWidget::setupUi()
     ui->baudCombo->addItems({"1M", "800K", "500K", "250K", "125K", "100K", "50K", "20K", "10K", "5K"});
     ui->baudCombo->setCurrentText("500K");
 
+    ui->dataBaudCombo->addItems({"2M", "4M", "5M", "8M", "10M"});
+    ui->dataBaudCombo->setCurrentText("2M");
+    ui->dataBaudLabel->setVisible(false);
+    ui->dataBaudCombo->setVisible(false);
+
     ui->connectBtn->setFixedWidth(qRound(70 * scale));
     ui->connectBtn->setStyleSheet(greenBtn);
     connect(ui->connectBtn, &QPushButton::clicked, this, &CanSessionWidget::onConnectClicked);
@@ -100,9 +109,11 @@ void CanSessionWidget::setupUi()
 
     // ─── 接收表格 ───
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColTime, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColTime, qRound(130 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColTime, qRound(100 * scale));
+    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDir, QHeaderView::Fixed);
+    ui->rxTable->horizontalHeader()->resizeSection(ColDir, qRound(50 * scale));
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColId, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColId, qRound(90 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColId, qRound(70 * scale));
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColCh, QHeaderView::Fixed);
     ui->rxTable->horizontalHeader()->resizeSection(ColCh, qRound(45 * scale));
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColType, QHeaderView::Fixed);
@@ -110,8 +121,6 @@ void CanSessionWidget::setupUi()
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDlc, QHeaderView::Fixed);
     ui->rxTable->horizontalHeader()->resizeSection(ColDlc, qRound(45 * scale));
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColData, QHeaderView::Stretch);
-    ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDir, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColDir, qRound(50 * scale));
     ui->rxTable->horizontalHeader()->setStretchLastSection(false);
     ui->rxTable->verticalHeader()->setDefaultSectionSize(qRound(24 * scale));
 
@@ -127,13 +136,31 @@ void CanSessionWidget::setupUi()
     // ─── 发送面板 ───
     ui->sendIdEdit->setMaximumWidth(qRound(100 * scale));
     ui->sendTypeCombo->addItems({"标准数据帧", "扩展数据帧", "远程帧"});
-    ui->sendDlcSpin->setRange(0, 64);
+    ui->sendDlcSpin->setRange(0, 8);
     ui->sendDlcSpin->setValue(8);
     ui->sendDlcSpin->setFixedWidth(qRound(55 * scale));
 
-    // 数据输入 — QPlainTextEdit 放在最下面，方便输入 CAN FD 数据
-    ui->sendDataEdit->setFixedHeight(qRound(56 * scale));
-    ui->sendDataEdit->setTabChangesFocus(true);
+    // 数据输入 — QHexEdit 放在最下面，方便输入 CAN FD 数据
+    m_sendDataEdit = new QHexEdit(this);
+    m_sendDataEdit->setOverwriteMode(true);
+    m_sendDataEdit->setReadOnly(false);
+    m_sendDataEdit->setAddressArea(true);
+    m_sendDataEdit->setAddressWidth(2);
+    m_sendDataEdit->setAsciiArea(false);
+    m_sendDataEdit->setBytesPerLine(8);
+    m_sendDataEdit->setHexCaps(true);
+    m_sendDataEdit->setFixedHeight(qRound(36 * scale));
+    // 用默认值 8 字节初始化
+    QByteArray initData(8, '\0');
+    m_sendDataEdit->setData(initData);
+    // 替换 UI 中 placeholder 为 QHexEdit
+    ui->txDataLayout->removeWidget(ui->sendDataEditHolder);
+    ui->sendDataEditHolder->hide();
+    ui->txDataLayout->insertWidget(1, m_sendDataEdit);
+
+    // 连接 DLC 变化 → 自动调整 QHexEdit 数据大小
+    connect(ui->sendDlcSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &CanSessionWidget::onSendDlcChanged);
 
     // 帧间隔 SpinBox：0 = 最快速，>0 = 每帧间隔 N ms
     ui->sendPeriodSpin->setRange(0, 10000);
@@ -185,6 +212,12 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
     case CanAdapterType::SocketCAN:
         if (!m_socketcan) { m_socketcan = new SocketCanAdapter(this); linkSignals(m_socketcan); }
         newCan = m_socketcan;
+        break;
+#endif
+#ifdef QT_DEBUG
+    case CanAdapterType::MockCan:
+        if (!m_mockcan) { m_mockcan = new MockCanAdapter(this); linkSignals(m_mockcan); }
+        newCan = m_mockcan;
         break;
 #endif
     default:
@@ -286,6 +319,7 @@ void CanSessionWidget::updateUiState(bool connected)
         ui->connectBtn->setText("断开");
         ui->connectBtn->setStyleSheet(redBtn);
         ui->baudCombo->setEnabled(false);
+        ui->dataBaudCombo->setEnabled(false);
     } else {
         ui->statusLabel->setText("未连接");
         ui->statusLabel->setToolTip("");
@@ -293,6 +327,7 @@ void CanSessionWidget::updateUiState(bool connected)
         ui->connectBtn->setText("连接");
         ui->connectBtn->setStyleSheet(greenBtn);
         ui->baudCombo->setEnabled(true);
+        ui->dataBaudCombo->setEnabled(true);
 
         qDeleteAll(m_channelChks);
         m_channelChks.clear();
@@ -361,21 +396,12 @@ void CanSessionWidget::prepareAndStartSend()
 {
     if (!m_can->isOpen()) return;
 
-    // 解析 16 进制数据（仅允许 0-9, A-F, a-f, 空格）
-    QString dataStr = ui->sendDataEdit->toPlainText().trimmed();
-    QString filtered;
-    for (const QChar &ch : dataStr) {
-        if (ch.isSpace() || (ch >= '0' && ch <= '9') ||
-            (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f')) {
-            filtered += ch;
-        }
-    }
-    if (filtered != dataStr) {
-        ui->sendDataEdit->setPlainText(filtered);
-        dataStr = filtered;
-    }
+    // 从 QHexEdit 读取原始二进制数据
+    QByteArray rawData = m_sendDataEdit->data();
+    int dataLen = qMin(rawData.size(), 64);
 
-    QStringList bytes = dataStr.split(' ', Qt::SkipEmptyParts);
+    // 清除 QHexEdit 的 modified 标记 (高亮)
+    m_sendDataEdit->setData(rawData);
 
     m_pendingMsg = CanMessage();
     m_pendingMsg.direction = CanDirection::Tx;
@@ -394,16 +420,13 @@ void CanSessionWidget::prepareAndStartSend()
     else if (typeIdx == 1) m_pendingMsg.type = CanFrameType::ExtendedData;
     else m_pendingMsg.type = CanFrameType::Remote;
 
-    int dlcVal = qMin(bytes.size(), 64);
-    m_pendingMsg.dlc = static_cast<uint8_t>(qMax(dlcVal, ui->sendDlcSpin->value()));
-    if (dlcVal > 0) {
-        m_pendingMsg.dlc = static_cast<uint8_t>(dlcVal);
-    }
+    // DLC 受 CAN-FD 限制
+    int maxDlc = m_isCanFd ? 64 : 8;
+    m_pendingMsg.dlc = static_cast<uint8_t>(qMin(qMax(dataLen, ui->sendDlcSpin->value()), maxDlc));
+    m_pendingMsg.isFd = m_isCanFd && (m_pendingMsg.dlc > 8);
 
-    int dataLen = qMin(bytes.size(), 64);
     for (int i = 0; i < dataLen; ++i) {
-        m_pendingMsg.data[i] = static_cast<uint8_t>(bytes[i].toUInt(&ok, 16));
-        if (!ok) m_pendingMsg.data[i] = 0;
+        m_pendingMsg.data[i] = static_cast<uint8_t>(rawData[i]);
     }
 
     // 设置发送状态
@@ -473,7 +496,7 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         ui->sendIdEdit->setEnabled(false);
         ui->sendTypeCombo->setEnabled(false);
         ui->sendDlcSpin->setEnabled(false);
-        ui->sendDataEdit->setEnabled(false);
+        m_sendDataEdit->setEnabled(false);
         ui->sendFrameCountSpin->setEnabled(false);
         ui->sendPeriodSpin->setEnabled(false);
     } else {
@@ -487,7 +510,7 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         ui->sendIdEdit->setEnabled(true);
         ui->sendTypeCombo->setEnabled(true);
         ui->sendDlcSpin->setEnabled(true);
-        ui->sendDataEdit->setEnabled(true);
+        m_sendDataEdit->setEnabled(true);
         ui->sendFrameCountSpin->setEnabled(true);
         ui->sendPeriodSpin->setEnabled(true);
     }
@@ -520,7 +543,7 @@ void CanSessionWidget::onSaveClicked()
     out.setCodec("UTF-8");
     out << QChar(0xFEFF);
 
-    out << "时间,ID,通道,类型,DLC,数据,方向\n";
+    out << "时间,方向,ID,通道,类型,DLC,数据\n";
 
     for (int row = 0; row < ui->rxTable->rowCount(); ++row) {
         for (int col = 0; col < ui->rxTable->columnCount(); ++col) {
@@ -563,6 +586,11 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
     timeItem->setTextAlignment(Qt::AlignCenter);
     ui->rxTable->setItem(row, ColTime, timeItem);
 
+    auto *dirItem = new QTableWidgetItem(msg.direction == CanDirection::Rx ? "Rx" : "Tx");
+    dirItem->setTextAlignment(Qt::AlignCenter);
+    dirItem->setForeground(msg.direction == CanDirection::Rx ? QColor("#2196F3") : QColor("#4CAF50"));
+    ui->rxTable->setItem(row, ColDir, dirItem);
+
     auto *idItem = new QTableWidgetItem(msg.idString());
     idItem->setTextAlignment(Qt::AlignCenter);
     if (msg.type == CanFrameType::ExtendedData)
@@ -573,7 +601,8 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
     chItem->setTextAlignment(Qt::AlignCenter);
     ui->rxTable->setItem(row, ColCh, chItem);
 
-    auto *typeItem = new QTableWidgetItem(msg.typeString());
+    QString typeStr = msg.typeString();
+    auto *typeItem = new QTableWidgetItem(typeStr);
     typeItem->setTextAlignment(Qt::AlignCenter);
     ui->rxTable->setItem(row, ColType, typeItem);
 
@@ -585,11 +614,6 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
     dataItem->setFont(QFont("Consolas", 9));
     ui->rxTable->setItem(row, ColData, dataItem);
 
-    auto *dirItem = new QTableWidgetItem(msg.direction == CanDirection::Rx ? "Rx" : "Tx");
-    dirItem->setTextAlignment(Qt::AlignCenter);
-    dirItem->setForeground(msg.direction == CanDirection::Rx ? QColor("#2196F3") : QColor("#4CAF50"));
-    ui->rxTable->setItem(row, ColDir, dirItem);
-
     if (ui->autoScrollChk->isChecked())
         ui->rxTable->scrollToBottom();
 
@@ -599,4 +623,89 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
 void CanSessionWidget::updateStats()
 {
     ui->rxCountLabel->setText(QString("Rx: %1  |  Tx: %2").arg(m_rxCount).arg(m_txCount));
+}
+
+void CanSessionWidget::setCanFdEnabled(bool enabled)
+{
+    if (m_isCanFd == enabled)
+        return;
+    // 直接设置状态并更新 UI
+    ui->canFdChk->setChecked(enabled);
+    onCanFdToggled(enabled);
+}
+
+CanBaudRate CanSessionWidget::dataBaudRate() const
+{
+    if (!m_isCanFd)
+        return CanBaudRate::BR_1M; // 非 FD 时无意义
+    return baudRateFromString(ui->dataBaudCombo->currentText());
+}
+
+CanBaudRate CanSessionWidget::arbBaudRate() const
+{
+    return baudRateFromString(ui->baudCombo->currentText());
+}
+
+void CanSessionWidget::setBaudRateText(const QString &text)
+{
+    ui->baudCombo->setCurrentText(text);
+}
+
+void CanSessionWidget::setDataBaudRateText(const QString &text)
+{
+    ui->dataBaudCombo->setCurrentText(text);
+}
+
+void CanSessionWidget::onSendDlcChanged(int dlc)
+{
+    if (!m_sendDataEdit) return;
+
+    // 非 FD 模式限制 DLC ≤ 8
+    if (!m_isCanFd && dlc > 8)
+        dlc = 8;
+
+    // 调整 QHexEdit 的数据大小为 dlc 字节
+    QByteArray current = m_sendDataEdit->data();
+    if (current.size() != dlc) {
+        current.resize(dlc);
+        // 新扩展的字节填充 0x00
+        m_sendDataEdit->setData(current);
+    }
+}
+
+void CanSessionWidget::onCanFdToggled(bool checked)
+{
+    m_isCanFd = checked;
+
+    // ── 波特朗/标签切换 ──
+    if (checked) {
+        ui->connBaudPrefixLabel->setText("仲裁域:");
+        ui->dataBaudLabel->setVisible(true);
+        ui->dataBaudCombo->setVisible(true);
+    } else {
+        ui->connBaudPrefixLabel->setText("波特率:");
+        ui->dataBaudLabel->setVisible(false);
+        ui->dataBaudCombo->setVisible(false);
+    }
+
+    // ── DLC SpinBox 范围 ──
+    ui->sendDlcSpin->blockSignals(true);
+    if (checked) {
+        ui->sendDlcSpin->setRange(0, 64);
+        ui->sendDlcSpin->setValue(64);
+    } else {
+        ui->sendDlcSpin->setRange(0, 8);
+        if (ui->sendDlcSpin->value() > 8)
+            ui->sendDlcSpin->setValue(8);
+    }
+    ui->sendDlcSpin->blockSignals(false);
+
+    // ── 更新 QHexEdit 数据大小 ──
+    onSendDlcChanged(ui->sendDlcSpin->value());
+}
+
+void CanSessionWidget::updateHexEditSize()
+{
+    int dlc = ui->sendDlcSpin->value();
+    onSendDlcChanged(dlc);
 }

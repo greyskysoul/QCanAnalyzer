@@ -50,6 +50,7 @@ void SocketCanAdapter::readSocket()
         msg.direction = CanDirection::Rx;
         msg.channel = 0;
         msg.timestamp = QDateTime::currentDateTime();
+        msg.isFd = (n == CANFD_MTU);
 
         if (frame.can_id & CAN_EFF_FLAG) {
             msg.type = CanFrameType::ExtendedData;
@@ -64,8 +65,9 @@ void SocketCanAdapter::readSocket()
         if (frame.can_id & CAN_ERR_FLAG)
             msg.type = CanFrameType::Error;
 
-        msg.dlc = frame.can_dlc > 8 ? 8 : frame.can_dlc;
-        for (int i = 0; i < msg.dlc && i < 8; ++i)
+        msg.dlc = frame.can_dlc & 0x0F; // CAN FD DLC 编码取低4位
+        int dataLen = msg.isFd ? canFdDlcToLen(msg.dlc) : (msg.dlc > 8 ? 8 : msg.dlc);
+        for (int i = 0; i < dataLen && i < 64; ++i)
             msg.data[i] = frame.data[i];
 
         emit messageReceived(msg);
@@ -205,8 +207,11 @@ bool SocketCanAdapter::sendMessage(const CanMessage &msg)
         frame.can_id |= CAN_EFF_FLAG;
     if (msg.type == CanFrameType::Remote)
         frame.can_id |= CAN_RTR_FLAG;
-    frame.can_dlc = msg.dlc > 8 ? 8 : msg.dlc;
-    for (int i = 0; i < frame.can_dlc; ++i)
+    if (msg.isFd)
+        frame.can_id |= CAN_FD_FLAG;
+    frame.can_dlc = msg.dlc;
+    int copyLen = msg.isFd ? qMin((int)msg.dlc, 64) : qMin((int)msg.dlc, 8);
+    for (int i = 0; i < copyLen; ++i)
         frame.data[i] = msg.data[i];
 
     int nbytes = write(m_socketFd, &frame, sizeof(frame));

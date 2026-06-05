@@ -283,11 +283,9 @@ bool GsUsbAdapter::sendMessage(const CanMessage &msg)
         frame.can_id |= CANDLE_ID_EXTENDED;
     else if (msg.type == CanFrameType::Remote)
         frame.can_id |= CANDLE_ID_RTR;
-    frame.can_dlc = msg.dlc > 8 ? 8 : msg.dlc;
-    if (msg.dlc > 8) {
-        qWarning() << "gs_usb: DLC truncated from" << msg.dlc << "to 8";
-    }
-    for (uint8_t i = 0; i < frame.can_dlc; ++i)
+    frame.can_dlc = msg.dlc;
+    int copyLen = msg.isFd ? qMin((int)msg.dlc, 64) : qMin((int)msg.dlc, 8);
+    for (int i = 0; i < copyLen; ++i)
         frame.data[i] = msg.data[i];
 
     bool ret = candle_frame_send(static_cast<candle_handle>(m_devHandle),
@@ -323,7 +321,9 @@ void GsUsbAdapter::onReadTimer()
 
             CanMessage msg;
             msg.id = candle_frame_id(&frame);
-            msg.dlc = candle_frame_dlc(&frame);
+            uint8_t rawDlc = candle_frame_dlc(&frame);
+            msg.dlc = rawDlc;
+            msg.isFd = (rawDlc > 8); // gs_usb: DLC > 8 视为 FD 帧
             msg.direction = CanDirection::Rx;
             msg.channel = m_channelIndex;
             msg.timestamp = QDateTime::currentDateTime();
@@ -334,8 +334,9 @@ void GsUsbAdapter::onReadTimer()
             if (candle_frame_is_rtr(&frame))
                 msg.type = CanFrameType::Remote;
 
+            int dataLen = msg.isFd ? canFdDlcToLen(rawDlc) : (rawDlc > 8 ? 8 : rawDlc);
             uint8_t *data = candle_frame_data(&frame);
-            for (uint8_t i = 0; i < msg.dlc && i < 8; ++i)
+            for (int i = 0; i < dataLen && i < 64; ++i)
                 msg.data[i] = data[i];
 
             emit messageReceived(msg);

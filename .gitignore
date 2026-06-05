@@ -74,3 +74,6 @@ Thumbs.db
 *.dll
 *.exe
 
+# Third-party binaries (tracked via Git LFS)
+!third_party/**/*.dll
+

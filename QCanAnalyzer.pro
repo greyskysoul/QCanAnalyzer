@@ -14,6 +14,12 @@ DEFINES += ADS_STATIC
 win32:RC_ICONS = icon.ico
 
 # ═══════════════════════════════════════════════════════════════
+# QHexEdit (静态编译)
+# ═══════════════════════════════════════════════════════════════
+QHEXEDIT_ROOT = libs/qhexedit2/src
+INCLUDEPATH += $$QHEXEDIT_ROOT
+
+# ═══════════════════════════════════════════════════════════════
 # qt-advanced-docking-system (静态编译，无需预构建库)
 # ═══════════════════════════════════════════════════════════════
 ADS_ROOT = libs/Qt-Advanced-Docking-System
@@ -94,7 +100,11 @@ SOURCES += \
     can/canmanager.cpp \
     ui/cansessionwidget.cpp \
     ui/welcomewidget.cpp \
-    ui/sessionconfigdialog.cpp
+    ui/sessionconfigdialog.cpp \
+    $$QHEXEDIT_ROOT/qhexedit.cpp \
+    $$QHEXEDIT_ROOT/chunks.cpp \
+    $$QHEXEDIT_ROOT/commands.cpp \
+    $$QHEXEDIT_ROOT/color_manager.cpp
 
 HEADERS += \
     mainwindow.h \
@@ -103,7 +113,11 @@ HEADERS += \
     can/canmanager.h \
     ui/cansessionwidget.h \
     ui/welcomewidget.h \
-    ui/sessionconfigdialog.h
+    ui/sessionconfigdialog.h \
+    $$QHEXEDIT_ROOT/qhexedit.h \
+    $$QHEXEDIT_ROOT/chunks.h \
+    $$QHEXEDIT_ROOT/commands.h \
+    $$QHEXEDIT_ROOT/color_manager.h
 
 # ── Windows 适配器 ──
 win32 {
@@ -123,6 +137,15 @@ unix:!macx {
 
     HEADERS += \
         can/socketcanadapter.h
+}
+
+# ── 虚拟适配器 (仅 Debug 模式) ──
+CONFIG(debug, debug|release) {
+    SOURCES += \
+        can/mockcanadapter.cpp
+
+    HEADERS += \
+        can/mockcanadapter.h
 }
 
 FORMS += \

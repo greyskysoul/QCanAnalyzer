@@ -18,7 +18,10 @@ struct CanDeviceInfo {
 enum class CanAdapterType {
     PCAN = 0,
     GsUsb,
-    SocketCAN
+    SocketCAN,
+#ifdef QT_DEBUG
+    MockCan    // 虚拟适配器，仅 Debug 模式
+#endif
 };
 
 /// 波特率预设

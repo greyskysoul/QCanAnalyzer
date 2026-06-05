@@ -6,6 +6,9 @@
 #else
 #include "can/socketcanadapter.h"
 #endif
+#ifdef QT_DEBUG
+#include "can/mockcanadapter.h"
+#endif
 
 #include <QPushButton>
 #include <QMessageBox>
@@ -25,6 +28,9 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
 #else
     ui->adapterCombo->addItem("PCAN", static_cast<int>(CanAdapterType::PCAN));
     ui->adapterCombo->addItem("gs_usb (candleLight)", static_cast<int>(CanAdapterType::GsUsb));
+#endif
+#ifdef QT_DEBUG
+    ui->adapterCombo->addItem("MockCAN (虚拟调试)", static_cast<int>(CanAdapterType::MockCan));
 #endif
 
     // 切换适配器时自动刷新设备列表
@@ -112,6 +118,13 @@ void SessionConfigDialog::scanDevices()
         break;
     }
 #endif
+#ifdef QT_DEBUG
+    case CanAdapterType::MockCan: {
+        MockCanAdapter adapter;
+        devices = adapter.scanDevices();
+        break;
+    }
+#endif
     }
 
     if (devices.isEmpty()) {
@@ -143,7 +156,13 @@ void SessionConfigDialog::scanDevices()
 
 void SessionConfigDialog::onCanFdToggled(bool checked)
 {
-    ui->fdGroup->setVisible(checked);
+    if (checked) {
+        ui->baudLabel->setText("仲裁域波特率:");
+        ui->fdGroup->setVisible(true);
+    } else {
+        ui->baudLabel->setText("波特率:");
+        ui->fdGroup->setVisible(false);
+    }
     adjustSize();
 }
 

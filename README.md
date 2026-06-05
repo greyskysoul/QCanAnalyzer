@@ -74,7 +74,8 @@ cd ..
 ```bash
 # 2. 安装 PCAN-Basic API
 #    从 https://www.peak-system.com 下载安装
-#    将 PCANBasic.dll 放到构建输出目录或 C:\Windows\System32\
+#    PCANBasic.dll 已通过 Git LFS 存放在 third_party/pcan/ 目录
+#    构建时自动复制到输出目录（见下方 .pro 配置）
 ```
 
 **Windows — gs_usb 设备**:

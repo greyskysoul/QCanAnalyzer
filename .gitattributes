@@ -1,0 +1,2 @@
+# Git LFS 跟踪规则
+*.dll filter=lfs diff=lfs merge=lfs -text
