@@ -123,6 +123,81 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="filterGroup">
+     <property name="title">
+      <string>帧过滤</string>
+     </property>
+     <layout class="QHBoxLayout" name="filterLayout">
+      <property name="spacing">
+       <number>6</number>
+      </property>
+      <item>
+       <widget class="QCheckBox" name="filterPassChk">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="toolTip">
+         <string>关闭过滤器，所有报文直接通过</string>
+        </property>
+        <property name="text">
+         <string>不过滤</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="Line" name="filterLine">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="filterIdLabel">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>ID:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="filterIdEdit">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="toolTip">
+         <string>默认十六进制，无需 0x 前缀。
+格式1: 123 → 精确匹配 ID=0x123
+格式2: 123-FF0 → ID-Mask, 匹配 (id &amp; 0xFF0) == 0x123
+  例: 123-FF0 匹配 0x123~0x12F
+  例: 123-FFF 匹配 0x023, 0x123, 0x223...
+多个条件用逗号分隔</string>
+        </property>
+        <property name="placeholderText">
+         <string>如: 123, 123-FF0 (留空不过滤)</string>
+        </property>
+        <property name="clearButtonEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="QSplitter" name="splitter">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -245,6 +320,12 @@
         <layout class="QHBoxLayout" name="txDataLayout">
          <item>
           <widget class="QLabel" name="sendDataLabel">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
            <property name="text">
             <string>数据(Hex):</string>
            </property>
@@ -265,6 +346,9 @@
        <item>
         <layout class="QVBoxLayout" name="verticalLayout_2">
          <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
           <number>0</number>
          </property>
          <item>
@@ -379,12 +463,32 @@
              </property>
             </spacer>
            </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_2">
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
            <item>
             <widget class="QPushButton" name="sendBtn">
              <property name="text">
               <string>发送</string>
              </property>
             </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
            </item>
           </layout>
          </item>

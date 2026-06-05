@@ -198,4 +198,11 @@ qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
-# 运行时需要 PCANBasic.dll 放在 exe 同目录
+# ═══════════════════════════════════════════════════════════════
+# 运行时 DLL 说明
+# ═══════════════════════════════════════════════════════════════
+# Windows 运行时需要以下 DLL 放在 exe 同目录:
+#   third_party/pcan/PCANBasic.dll       — PCAN 设备
+#   third_party/zcanfd/ControlCANFD.dll  — ZCANFD 设备
+#   third_party/zcan/ControlCAN.dll      — ZCAN 设备
+# 构建后请手动复制，或通过 Qt Creator 的 "部署" 步骤自动复制。

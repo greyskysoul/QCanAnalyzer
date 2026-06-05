@@ -89,6 +89,7 @@ private slots:
     void onClearClicked();
     void onSaveClicked();
     void onMessageReceived(const CanMessage &msg);
+    void onFilterChanged();
 
 private:
     void setupUi();
@@ -104,6 +105,7 @@ private:
     void onSendDlcChanged(int dlc);
     void onCanFdToggled(bool checked);
     void updateHexEditSize();
+    bool passFilter(const CanMessage &msg) const;
 
     Ui::CanSessionWidget *ui;
 
@@ -148,6 +150,14 @@ private:
     int m_rxCount = 0;
     int m_txCount = 0;
     int m_maxTableRows = 5000; // 最大表格行数
+
+    // ─── 软过滤器 ───
+    struct FilterEntry {
+        uint32_t id = 0;   // 匹配的 ID
+        uint32_t mask = 0; // 掩码: 1=必须匹配, 0=不关心
+    };
+    QList<FilterEntry> m_filterEntries;
+    bool  m_filterEnabled = false;                      // 过滤是否启用
 };
 
 #endif // CANSESSIONWIDGET_H

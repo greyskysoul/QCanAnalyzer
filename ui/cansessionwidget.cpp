@@ -112,20 +112,20 @@ void CanSessionWidget::setupUi()
 
     // ─── 接收表格 ───
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColTime, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColTime, qRound(100 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColTime, 100);
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDir, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColDir, qRound(50 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColDir, 50);
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColId, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColId, qRound(70 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColId, 100);
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColCh, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColCh, qRound(45 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColCh, 45);
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColType, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColType, qRound(55 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColType, 60);
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDlc, QHeaderView::Fixed);
-    ui->rxTable->horizontalHeader()->resizeSection(ColDlc, qRound(45 * scale));
+    ui->rxTable->horizontalHeader()->resizeSection(ColDlc, 45);
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColData, QHeaderView::Stretch);
     ui->rxTable->horizontalHeader()->setStretchLastSection(false);
-    ui->rxTable->verticalHeader()->setDefaultSectionSize(qRound(24 * scale));
+    ui->rxTable->verticalHeader()->setDefaultSectionSize(24);
 
     // ─── 接收状态栏 ───
     ui->saveBtn->setFixedWidth(qRound(55 * scale));
@@ -149,10 +149,10 @@ void CanSessionWidget::setupUi()
     m_sendDataEdit->setReadOnly(false);
     m_sendDataEdit->setAddressArea(true);
     m_sendDataEdit->setAddressWidth(2);
-    m_sendDataEdit->setAsciiArea(false);
+    m_sendDataEdit->setAsciiArea(true);
     m_sendDataEdit->setBytesPerLine(8);
     m_sendDataEdit->setHexCaps(true);
-    m_sendDataEdit->setFixedHeight(qRound(36 * scale));
+    m_sendDataEdit->setFixedWidth(qRound(155 * scale));
     // 用默认值 8 字节初始化
     QByteArray initData(8, '\0');
     m_sendDataEdit->setData(initData);
@@ -187,6 +187,13 @@ void CanSessionWidget::setupUi()
     // 分割器比例
     ui->splitter->setStretchFactor(0, 3);
     ui->splitter->setStretchFactor(1, 1);
+
+    // ─── 软过滤器 ───
+    connect(ui->filterIdEdit, &QLineEdit::textChanged,
+            this, &CanSessionWidget::onFilterChanged);
+    connect(ui->filterPassChk, &QCheckBox::toggled,
+            this, &CanSessionWidget::onFilterChanged);
+    onFilterChanged(); // 初始状态
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -578,8 +585,99 @@ void CanSessionWidget::onSaveClicked()
 
 // ─── 接收消息 ─────────────────────────────────────────────────
 
+// ═══════════════════════════════════════════════════════════════
+// 软过滤器
+// ═══════════════════════════════════════════════════════════════
+
+void CanSessionWidget::onFilterChanged()
+{
+    bool pass = ui->filterPassChk->isChecked();
+    m_filterEnabled = !pass;
+    m_filterEntries.clear();
+
+    if (pass) {
+        ui->filterIdEdit->setEnabled(false);
+        ui->filterIdEdit->setStyleSheet("");
+        return;
+    }
+
+    ui->filterIdEdit->setEnabled(true);
+
+    QString text = ui->filterIdEdit->text().trimmed();
+    if (text.isEmpty()) {
+        m_filterEnabled = false;
+        ui->filterIdEdit->setStyleSheet("");
+        return;
+    }
+
+    // 解析过滤表达式: 默认十六进制，逗号分隔
+    //   123       → 精确匹配 0x123
+    //   123-FFF   → ID-Mask: 匹配 (can_id & 0xFFF) == 0x123
+    //   123-FF0   → ID-Mask: 匹配高12位=0x123, 低4位任意
+    const QStringList parts = text.split(',', Qt::SkipEmptyParts);
+    bool parseOk = true;
+    for (const QString &part : parts) {
+        QString s = part.trimmed().toUpper();
+        if (s.isEmpty()) continue;
+
+        int dashIdx = s.indexOf('-');
+        if (dashIdx > 0) {
+            // ── ID-Mask 格式 ──
+            QString sId = s.left(dashIdx).trimmed();
+            QString sMask = s.mid(dashIdx + 1).trimmed();
+            bool okId, okMask;
+            uint32_t id = sId.toUInt(&okId, 16);
+            uint32_t mask = sMask.toUInt(&okMask, 16);
+            if (okId && okMask) {
+                FilterEntry e;
+                e.id = id;
+                e.mask = mask;
+                m_filterEntries.append(e);
+            } else {
+                parseOk = false;
+            }
+        } else {
+            // ── 纯 ID 精确匹配 ──
+            bool ok;
+            uint32_t id = s.toUInt(&ok, 16);
+            if (ok) {
+                FilterEntry e;
+                e.id = id;
+                e.mask = 0xFFFFFFFF; // 精确匹配
+                m_filterEntries.append(e);
+            } else {
+                parseOk = false;
+            }
+        }
+    }
+
+    if (m_filterEntries.isEmpty()) {
+        m_filterEnabled = false;
+        ui->filterIdEdit->setStyleSheet(parseOk ? "" : "border: 1px solid red;");
+    } else if (!parseOk) {
+        ui->filterIdEdit->setStyleSheet("border: 1px solid orange;");
+    } else {
+        ui->filterIdEdit->setStyleSheet("border: 1px solid #4CAF50;");
+    }
+}
+
+bool CanSessionWidget::passFilter(const CanMessage &msg) const
+{
+    if (!m_filterEnabled || m_filterEntries.isEmpty())
+        return true;
+
+    for (const FilterEntry &e : m_filterEntries) {
+        // id+mask 方式: (can_id & mask) == (entry.id & mask)
+        if ((msg.id & e.mask) == (e.id & e.mask))
+            return true;
+    }
+    return false;
+}
+
 void CanSessionWidget::onMessageReceived(const CanMessage &msg)
 {
+    if (!passFilter(msg)) return;
+
     m_rxCount++;
     addMessageToTable(msg);
 }
@@ -625,7 +723,30 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
 
     auto *dataItem = new QTableWidgetItem(msg.dataHex());
     dataItem->setFont(QFont("Consolas", 9));
+    if (msg.dlc > 8) {
+        // CAN FD 长数据: 每8字节一行
+        QString text = msg.dataHex();
+        QString wrapped;
+        int byteCnt = 0;
+        for (int i = 0; i < text.length(); ++i) {
+            wrapped += text[i];
+            if (text[i] == ' ') {
+                byteCnt++;
+                if (byteCnt == 8 && i + 1 < text.length()) {
+                    wrapped += '\n';
+                    byteCnt = 0;
+                }
+            }
+        }
+        dataItem->setText(wrapped.trimmed());
+    }
     ui->rxTable->setItem(row, ColData, dataItem);
+
+    // 长数据时动态调整行高
+    if (msg.dlc > 8) {
+        int lines = (msg.dlc + 7) / 8;
+        ui->rxTable->verticalHeader()->resizeSection(row, 18 * lines);
+    }
 
     if (ui->autoScrollChk->isChecked())
         ui->rxTable->scrollToBottom();

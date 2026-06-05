@@ -48,9 +48,8 @@ struct CanMessage {
     }
 
     QString idString() const {
-        if (type == CanFrameType::ExtendedData)
-            return QString("0x%1").arg(id, 8, 16, QChar('0')).toUpper();
-        return QString("0x%1").arg(id, 3, 16, QChar('0')).toUpper();
+        int width = (type == CanFrameType::ExtendedData) ? 8 : 3;
+        return "0x" + QString("%1").arg(id, width, 16, QChar('0')).toUpper();
     }
 
     QString dataHex() const {
