@@ -3,9 +3,12 @@
 #ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
-#else
-#include "can/socketcanadapter.h"
 #endif
+#include "can/zcanfdadapter.h"
+#ifndef Q_OS_LINUX
+#include "can/zcanadapter.h"
+#endif
+#include "can/socketcanadapter.h"
 #ifdef QT_DEBUG
 #include "can/mockcanadapter.h"
 #endif
@@ -29,13 +32,17 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     ui->adapterCombo->addItem("PCAN", static_cast<int>(CanAdapterType::PCAN));
     ui->adapterCombo->addItem("gs_usb (candleLight)", static_cast<int>(CanAdapterType::GsUsb));
 #endif
+    ui->adapterCombo->addItem("ZCANFD (USBCANFD)", static_cast<int>(CanAdapterType::ZCANFD));
+#ifndef Q_OS_LINUX
+    ui->adapterCombo->addItem("ZCAN (USBCAN)", static_cast<int>(CanAdapterType::ZCAN));
+#endif
 #ifdef QT_DEBUG
     ui->adapterCombo->addItem("MockCAN (虚拟调试)", static_cast<int>(CanAdapterType::MockCan));
 #endif
 
-    // 切换适配器时自动刷新设备列表
+    // 切换适配器时只更新提示，不自动扫描（避免卡顿）
     connect(ui->adapterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &SessionConfigDialog::scanDevices);
+            this, &SessionConfigDialog::onAdapterChanged);
 
     // 刷新按钮
     ui->refreshBtn->setStyleSheet(
@@ -81,13 +88,22 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     });
     connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    // ── 最后才扫描设备 ──
-    scanDevices();
+    // ── 初始状态显示提示 ──
+    onAdapterChanged();
 }
 
 SessionConfigDialog::~SessionConfigDialog()
 {
     delete ui;
+}
+
+void SessionConfigDialog::onAdapterChanged()
+{
+    ui->deviceCombo->clear();
+    ui->deviceCombo->addItem("点击「刷新」扫描设备", -1);
+    ui->statusLabel->setText("请点击刷新按钮扫描设备");
+    if (auto *btn = ui->buttonBox->button(QDialogButtonBox::Ok))
+        btn->setEnabled(false);
 }
 
 void SessionConfigDialog::scanDevices()
@@ -107,6 +123,18 @@ void SessionConfigDialog::scanDevices()
     }
     case CanAdapterType::GsUsb: {
         GsUsbAdapter adapter;
+        devices = adapter.scanDevices();
+        break;
+    }
+#endif
+    case CanAdapterType::ZCANFD: {
+        ZcanFdAdapter adapter;
+        devices = adapter.scanDevices();
+        break;
+    }
+#ifndef Q_OS_LINUX
+    case CanAdapterType::ZCAN: {
+        ZcanAdapter adapter;
         devices = adapter.scanDevices();
         break;
     }

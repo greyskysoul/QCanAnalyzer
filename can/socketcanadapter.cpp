@@ -14,6 +14,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
+
+// CAN_FD_FLAG 在较老的 kernel headers (< 4.11) 中未定义
+#ifndef CAN_FD_FLAG
+#define CAN_FD_FLAG 0x00008000U
+#endif
 #endif
 
 SocketCanAdapter::SocketCanAdapter(QObject *parent)

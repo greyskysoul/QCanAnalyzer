@@ -100,9 +100,6 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
                 PCAN_USBBUS13,PCAN_USBBUS14,PCAN_USBBUS15,PCAN_USBBUS16,
                 PCAN_PCIBUS1, PCAN_PCIBUS2, PCAN_PCIBUS3, PCAN_PCIBUS4,
                 PCAN_PCIBUS5, PCAN_PCIBUS6, PCAN_PCIBUS7, PCAN_PCIBUS8,
-                PCAN_ISABUS1, PCAN_ISABUS2, PCAN_ISABUS3, PCAN_ISABUS4,
-                PCAN_ISABUS5, PCAN_ISABUS6, PCAN_ISABUS7, PCAN_ISABUS8,
-                PCAN_DNGBUS1,
             };
 
             for (int ch : channels) {
@@ -143,7 +140,7 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
     for (int ch : fallbackChannels) {
         uint16_t handle = (uint16_t)ch;
         // 尝试初始化来检测硬件
-        uint32_t res = m_Initialize(handle, 0x001C, 0, 0);
+        uint32_t res = m_Initialize(handle, 0x001C, 0, 0, 0);
         if (res == PCAN_ERROR_OK) {
             CanDeviceInfo info;
             info.channel = ch;
@@ -165,7 +162,7 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
     if (!m_loaded) return false;
     if (m_opened) close();
 
-    uint32_t res = m_Initialize((uint16_t)channel, (uint32_t)baud, 0, 0);
+    uint32_t res = m_Initialize((TPCANHandle)channel, (TPCANBaudrate)baud, 0, 0, 0);
     if (res != PCAN_ERROR_OK) {
         emit errorOccurred(QString("PCAN 初始化失败: %1").arg(errorText(res)));
         return false;
@@ -174,7 +171,7 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
     // 设置读取超时
     if (m_SetValue) {
         uint32_t timeout = m_readTimeoutMs;
-        m_SetValue((uint16_t)channel, 0x03, &timeout, sizeof(timeout)); // PCAN_RECEIVE_EVENT
+        m_SetValue((TPCANHandle)channel, PCAN_RECEIVE_EVENT, &timeout, sizeof(timeout));
     }
 
     m_channel = (uint16_t)channel;
@@ -329,7 +326,7 @@ QString PcanAdapter::channelName(int channel)
     }
 }
 
-QString PcanAdapter::errorText(uint32_t err)
+QString PcanAdapter::errorText(TPCANStatus err)
 {
     if (!m_GetErrorText) return QString("0x%1").arg(err, 5, 16, QChar('0'));
     char buf[256] = {};

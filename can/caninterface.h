@@ -11,7 +11,7 @@ struct CanDeviceInfo {
     QString name;        // 显示名称
     QString description; // 详细描述
     int channel = -1;    // 通道号
-    int adapterType = 0; // 适配器类型: 0=PCAN, 1=gs_usb, 2=SocketCAN
+    int adapterType = 0; // 适配器类型: 0=PCAN, 1=gs_usb, 2=SocketCAN, 3=ZCANFD, 4=ZCAN
 };
 
 /// 适配器类型
@@ -19,6 +19,8 @@ enum class CanAdapterType {
     PCAN = 0,
     GsUsb,
     SocketCAN,
+    ZCANFD,
+    ZCAN,
 #ifdef QT_DEBUG
     MockCan    // 虚拟适配器，仅 Debug 模式
 #endif

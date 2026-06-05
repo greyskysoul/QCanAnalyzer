@@ -23,6 +23,10 @@ QT_END_NAMESPACE
 
 class PcanAdapter;
 class GsUsbAdapter;
+class ZcanFdAdapter;
+#ifndef Q_OS_LINUX
+class ZcanAdapter;
+#endif
 class SocketCanAdapter;
 class MockCanAdapter;
 
@@ -121,6 +125,10 @@ private:
     CanInterface *m_can = nullptr;
     PcanAdapter   *m_pcan = nullptr;
     GsUsbAdapter  *m_gsusb = nullptr;
+    ZcanFdAdapter  *m_zcanfd = nullptr;
+#ifndef Q_OS_LINUX
+    ZcanAdapter   *m_zcan = nullptr;
+#endif
     SocketCanAdapter *m_socketcan = nullptr;
 #ifdef QT_DEBUG
     MockCanAdapter *m_mockcan = nullptr;

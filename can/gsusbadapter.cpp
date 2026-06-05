@@ -8,7 +8,7 @@
 
 // candle API 头文件
 extern "C" {
-#include "CandleApiDriver/api/candle.h"
+#include <third_party/CandleApiDriver/api/candle.h>
 }
 
 GsUsbAdapter::GsUsbAdapter(QObject *parent)

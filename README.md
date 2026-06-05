@@ -1,13 +1,13 @@
 # QCanAnalyzer — CAN 总线调试分析工具
 
-> ⚠️ **AI 声明**: 本项目 100% 由 GitHub Copilot (DeepSeek V4 Pro) 在 VS Code 中生成，包括但不限于：工程结构设计、PCAN/gs_usb/SocketCAN 多适配器架构、Qt Advanced Docking System 集成、所有 UI 布局与样式、CAN 报文收发逻辑。人工仅负责提出需求和编译验证。
+> ⚠️ **AI 声明**: 本项目 100% 由 GitHub Copilot (DeepSeek V4 Pro) 在 VS Code 中生成，包括但不限于：工程结构设计、PCAN/gs_usb/ZCANFD/ZCAN/SocketCAN 多适配器架构、Qt Advanced Docking System 集成、所有 UI 布局与样式、CAN 报文收发逻辑。人工仅负责提出需求和编译验证。
 
 ---
 
 ## 功能特性
 
-- 🔌 **多设备支持** — PCAN (PEAK USB/PCI)、gs_usb (candleLight)、SocketCAN (Linux)
-- 🐧 **跨平台** — Windows + Linux，Linux 下原生支持 SocketCAN 和 gs_usb 内核驱动
+- 🔌 **多设备支持** — PCAN (PEAK USB/PCI)、gs_usb (candleLight)、ZCANFD/ZCAN (ZLG USBCANFD)、SocketCAN (Linux)
+- 🐧 **跨平台** — Windows + Linux，Linux 下原生支持 SocketCAN
 - 🪟 **多会话停靠** — 基于 Qt Advanced Docking System，同时开启多个 CAN 会话，标签页分组
 - 📡 **CAN-FD 支持** — DLC 0~64，数据输入框支持 64 字节十六进制数据
 - 📥 **灵活发送** — 标准帧/扩展帧/远程帧；周期发送（锁定周期防误触）；指定帧数批量发送；发送中可随时停止
@@ -23,6 +23,8 @@
 |--------|------|------|
 | **PCAN** | Windows | PEAK-System 全系列，需 PCANBasic.dll |
 | **gs_usb** | Windows / Linux | candleLight 等开源 CAN 适配器 |
+| **ZCANFD** | Windows / Linux | ZLG USBCANFD 系列 (CAN FD)，需 ControlCANFD.dll |
+| **ZCAN** | Windows | ZLG USBCAN 系列 (仅标准 CAN)，需 ControlCAN.dll |
 | **SocketCAN** | Linux | 内核原生 CAN 子系统 (can0, vcan0...) |
 
 ### Linux 下 SocketCAN 使用注意
@@ -58,7 +60,7 @@ sudo ip link set up vcan0
 
 - **Qt 5.14+** (推荐 MinGW 64-bit / GCC)
 - **Windows** 或 **Linux**
-- Git
+- Git + Git LFS
 
 ### 步骤
 
@@ -70,19 +72,34 @@ git clone https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git
 cd ..
 ```
 
+**所有设备的 DLL / .a 文件已通过 Git LFS 存放在 `third_party/` 下**，克隆后请确保 LFS 文件已拉取：
+
+```bash
+git lfs pull
+```
+
 **Windows — PCAN 设备**:
 ```bash
-# 2. 安装 PCAN-Basic API
-#    从 https://www.peak-system.com 下载安装
-#    PCANBasic.dll 已通过 Git LFS 存放在 third_party/pcan/ 目录
-#    构建时自动复制到输出目录（见下方 .pro 配置）
+# PCANBasic.dll 已通过 Git LFS 存放在 third_party/pcan/ 目录
+# 仍需安装 PEAK 驱动: https://www.peak-system.com
 ```
 
 **Windows — gs_usb 设备**:
 ```bash
 # gs_usb (candleLight) 使用 candle API 静态编译，无需外部 DLL
-# 驱动源文件位于 can/CandleApiDriver/api/ 目录
 # 需要安装 WinUSB 驱动 (使用 Zadig 工具: https://zadig.akeo.ie/)
+```
+
+**Windows — ZCANFD / ZCAN 设备**:
+```bash
+# ControlCANFD.dll / ControlCAN.dll 已通过 Git LFS 存放在 third_party/zcanfd/ 和 third_party/zcan/
+# 需要安装 ZLG USBCAN 驱动 (随设备提供)
+```
+
+**Linux — ZCANFD 设备**:
+```bash
+# libcontrolcanfd.a 已通过 Git LFS 存放在 third_party/zcanfd/
+# 静态链接，无需额外运行时依赖
 ```
 
 **Linux**:
@@ -116,8 +133,14 @@ QCanAnalyzer/
 │   ├── canmanager.h/.cpp      # 多会话管理器 (标签组管理)
 │   ├── pcanadapter.h/.cpp     # PCAN 适配器 (动态加载 PCANBasic.dll)
 │   ├── gsusbadapter.h/.cpp    # gs_usb 适配器 (candleLight, bittiming 自动搜索)
+│   ├── zcanfdadapter.h/.cpp   # ZCANFD 适配器 (ZLG USBCANFD, CAN FD)
+│   ├── zcanadapter.h/.cpp     # ZCAN 适配器 (ZLG USBCAN, 仅标准 CAN)
 │   ├── socketcanadapter.h/.cpp # SocketCAN 适配器 (Linux, QSocketNotifier)
 │   └── CandleApiDriver/       # candle API 静态库驱动
+├── third_party/
+│   ├── pcan/PCANBasic.dll     # PCAN Basic API (Git LFS)
+│   ├── zcanfd/                # ZCANFD SDK (Git LFS)
+│   └── zcan/                  # ZCAN (VCI) SDK (Git LFS)
 ├── ui/
 │   ├── welcomewidget.h/.cpp/.ui  # 欢迎页
 │   ├── sessionconfigdialog.h/.cpp/.ui # 新建会话对话框

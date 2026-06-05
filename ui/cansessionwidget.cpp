@@ -3,8 +3,11 @@
 #ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
+#include "can/zcanfdadapter.h"
+#include "can/zcanadapter.h"
 #else
 #include "can/socketcanadapter.h"
+#include "can/zcanfdadapter.h"
 #endif
 #ifdef QT_DEBUG
 #include "can/mockcanadapter.h"
@@ -206,6 +209,16 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
     case CanAdapterType::GsUsb:
         if (!m_gsusb) { m_gsusb = new GsUsbAdapter(this); linkSignals(m_gsusb); }
         newCan = m_gsusb;
+        break;
+#endif
+    case CanAdapterType::ZCANFD:
+        if (!m_zcanfd) { m_zcanfd = new ZcanFdAdapter(this); linkSignals(m_zcanfd); }
+        newCan = m_zcanfd;
+        break;
+#ifndef Q_OS_LINUX
+    case CanAdapterType::ZCAN:
+        if (!m_zcan) { m_zcan = new ZcanAdapter(this); linkSignals(m_zcan); }
+        newCan = m_zcan;
         break;
 #endif
 #ifdef Q_OS_LINUX

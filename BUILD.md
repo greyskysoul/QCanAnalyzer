@@ -1,12 +1,13 @@
 # QCanAnalyzer — CAN 总线调试分析工具
 
-基于 Qt 5/6 + qt-advanced-docking-system 的多会话 CAN 调试工具，兼容 PCAN 设备。
+基于 Qt 5/6 + qt-advanced-docking-system 的多会话 CAN 调试工具，支持多种 CAN 设备。
 
 ## 功能特性
 
 - 🪟 **多会话停靠框架** — 基于 qt-advanced-docking-system，同时打开多个 CAN 会话，自由拖拽布局
-- 🔌 **PCAN 设备兼容** — 动态加载 PCANBasic.dll，支持 USB/PCI/ISA 全系列 PEAK CAN 设备
-- 📥 **报文收发** — 接收 CAN 报文实时显示，支持周期发送
+- 🔌 **多设备支持** — PCAN、gs_usb (candleLight)、ZCANFD (ZLG USBCANFD)、ZCAN (ZLG USBCAN)、SocketCAN (Linux)
+- 📡 **CAN-FD 支持** — CAN FD 帧收发 (DLC 0~64)，ZCANFD 适配器原生支持
+- 📥 **报文收发** — 接收 CAN 报文实时显示，支持周期/批量发送
 - 📊 **报文表格** — 时间戳、ID、类型、DLC、数据一目了然
 
 ## 构建步骤
@@ -28,15 +29,20 @@ cd ..
 
 > 如果你已有该库的其他位置，修改 `QCanAnalyzer.pro` 中的 `ADS_ROOT` 路径。
 
-### 3. 准备 PCAN Basic API
+### 3. 准备设备驱动与 DLL
 
-1. 从 [PEAK-System 官网](https://www.peak-system.com/PCAN-Basic.239.0.html) 下载 **PCAN-Basic API**
-2. 安装后将 `PCANBasic.dll` 复制到以下位置之一：
-   - 项目构建输出目录 (如 `build/Desktop_Qt_.../debug/`)
-   - `C:\Windows\System32\`
-   - 或添加到系统 PATH
+**所有设备的 DLL / .a 文件已通过 Git LFS 存放在 `third_party/` 下**，克隆后请确保 LFS 文件已拉取：
+```bash
+git lfs pull
+```
 
-> 仅 Windows 需要。程序运行时会自动动态加载此 DLL。
+**PCAN**: 仍需安装 [PEAK 驱动](https://www.peak-system.com)，`PCANBasic.dll` 已通过 LFS 存放。
+
+**gs_usb (candleLight)**: 使用 WinUSB 驱动（[Zadig](https://zadig.akeo.ie/)），candle API 静态编译无需 DLL。
+
+**ZCANFD / ZCAN**: DLL 已通过 LFS 存放，需安装 [ZLG USBCAN 驱动](https://www.zlg.cn)（随设备提供）。
+
+> 程序运行时会自动动态加载对应的 DLL。
 
 ### 4. 构建
 
@@ -52,20 +58,23 @@ mingw32-make  # MinGW
 
 ### Linux 额外依赖
 
-在 Linux 下编译需要安装 xcb 开发库:
+在 Linux 下需要安装 xcb 开发库:
 
 ```bash
 # Debian/Ubuntu
-sudo apt install libxcb1-dev
+sudo apt install libxcb1-dev libusb-1.0-0-dev
 
 # Fedora
-sudo dnf install libxcb-devel
+sudo dnf install libxcb-devel libusb1-devel
 
 # Arch
-sudo pacman -S libxcb
+sudo pacman -S libxcb libusb
 ```
 
-Linux 下仅支持 SocketCAN 适配器，无需安装 PCAN 或 candle 驱动。
+Linux 下支持的适配器：
+- **SocketCAN** — 内核原生，使用前用 `ip link` 配置波特率
+- **ZCANFD** — 静态链接 `libcontrolcanfd.a`
+- **gs_usb** — 加载 `gs_usb` 内核模块即可
 ```
 
 ### 5. 运行
@@ -85,12 +94,22 @@ QCanAnalyzer/
 ├── can/
 │   ├── canmessage.h          # CAN 消息数据结构
 │   ├── caninterface.h        # CAN 接口抽象基类
+│   ├── canmanager.h/.cpp     # 多会话管理器
 │   ├── pcanadapter.h/.cpp    # PCAN 设备适配器
-│   └── canmanager.h/.cpp     # 多会话管理器
+│   ├── gsusbadapter.h/.cpp   # gs_usb 适配器
+│   ├── zcanfdadapter.h/.cpp  # ZCANFD 适配器 (CAN FD)
+│   ├── zcanadapter.h/.cpp    # ZCAN 适配器 (VCI API)
+│   ├── socketcanadapter.h/.cpp # SocketCAN 适配器
+│   └── CandleApiDriver/      # candle API 驱动
+├── third_party/              # 第三方 SDK (Git LFS)
+│   ├── pcan/PCANBasic.dll
+│   ├── zcanfd/
+│   └── zcan/
 ├── ui/
-│   └── cansessionwidget.h/.cpp # CAN 会话面板 (停靠窗口内容)
-└── libs/
-    └── Qt-Advanced-Docking-System/  # (需自行克隆)
+│   └── cansessionwidget.h/.cpp/.ui # CAN 会话面板
+├── libs/
+│   └── Qt-Advanced-Docking-System/  # (需自行克隆)
+└── pic/                      # 截图
 ```
 
 ## 扩展其他 CAN 设备

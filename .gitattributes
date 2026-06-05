@@ -1,2 +1,5 @@
 # Git LFS 跟踪规则
-*.dll filter=lfs diff=lfs merge=lfs -text
+third_party/pcan/PCANBasic.dll filter=lfs diff=lfs merge=lfs -text
+third_party/zcanfd/ControlCANFD.dll filter=lfs diff=lfs merge=lfs -text
+third_party/zcanfd/libcontrolcanfd.a filter=lfs diff=lfs merge=lfs -text
+third_party/zcan/ControlCAN.dll filter=lfs diff=lfs merge=lfs -text

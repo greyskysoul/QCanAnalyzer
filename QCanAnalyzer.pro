@@ -28,12 +28,15 @@ INCLUDEPATH += $$ADS_ROOT/src
 # ═══════════════════════════════════════════════════════════════
 # candle API (gs_usb / candleLight 驱动) — 仅 Windows
 # ═══════════════════════════════════════════════════════════════
-INCLUDEPATH += can/CandleApiDriver/api
+INCLUDEPATH += third_party/CandleApiDriver/api
+INCLUDEPATH += third_party/pcan
+INCLUDEPATH += third_party/zcanfd
+INCLUDEPATH += third_party/zcan
 
 win32 {
     SOURCES += \
-        can/CandleApiDriver/api/candle.c \
-        can/CandleApiDriver/api/candle_ctrl_req.c
+        third_party/CandleApiDriver/api/candle.c \
+        third_party/CandleApiDriver/api/candle_ctrl_req.c
 
     LIBS += -lwinusb -lsetupapi -lcfgmgr32 -lole32
 }
@@ -98,6 +101,7 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     can/canmanager.cpp \
+    can/zcanfdadapter.cpp \
     ui/cansessionwidget.cpp \
     ui/welcomewidget.cpp \
     ui/sessionconfigdialog.cpp \
@@ -111,6 +115,7 @@ HEADERS += \
     can/canmessage.h \
     can/caninterface.h \
     can/canmanager.h \
+    can/zcanfdadapter.h \
     ui/cansessionwidget.h \
     ui/welcomewidget.h \
     ui/sessionconfigdialog.h \
@@ -123,11 +128,19 @@ HEADERS += \
 win32 {
     SOURCES += \
         can/pcanadapter.cpp \
-        can/gsusbadapter.cpp
+        can/gsusbadapter.cpp \
+        can/zcanadapter.cpp
 
     HEADERS += \
         can/pcanadapter.h \
-        can/gsusbadapter.h
+        can/gsusbadapter.h \
+        can/zcanadapter.h
+
+    # ZCANFD: Windows 运行时需要 ControlCANFD.dll 放在 exe 同目录或 third_party/zcanfd/
+    # ZCAN:   Windows 运行时需要 ControlCAN.dll 放在 exe 同目录或 third_party/zcan/
+    # 此处仅声明依赖, 实际由 QLibrary 动态加载
+    LIBS += -L$$PWD/third_party/zcanfd
+    LIBS += -L$$PWD/third_party/zcan
 }
 
 # ── Linux 适配器 ──
@@ -137,6 +150,9 @@ unix:!macx {
 
     HEADERS += \
         can/socketcanadapter.h
+
+    # ZCANFD: Linux 静态链接 libcontrolcanfd.a
+    LIBS += -L$$PWD/third_party/zcanfd -lcontrolcanfd -lusb
 }
 
 # ── 虚拟适配器 (仅 Debug 模式) ──

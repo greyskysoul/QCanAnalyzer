@@ -2,9 +2,12 @@
 #ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
-#else
-#include "can/socketcanadapter.h"
 #endif
+#include "can/zcanfdadapter.h"
+#ifndef Q_OS_LINUX
+#include "can/zcanadapter.h"
+#endif
+#include "can/socketcanadapter.h"
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <DockAreaWidget.h>
@@ -46,6 +49,10 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
 #ifndef Q_OS_LINUX
     case CanAdapterType::PCAN:     devName = PcanAdapter::channelName(channel); break;
     case CanAdapterType::GsUsb:    devName = GsUsbAdapter::channelName(channel); break;
+#endif
+    case CanAdapterType::ZCANFD:  devName = ZcanFdAdapter::channelName(channel); break;
+#ifndef Q_OS_LINUX
+    case CanAdapterType::ZCAN:    devName = ZcanAdapter::channelName(channel); break;
 #endif
 #ifdef Q_OS_LINUX
     case CanAdapterType::SocketCAN:devName = deviceName.isEmpty() ? QString("can0") : deviceName; break;

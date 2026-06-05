@@ -28,6 +28,7 @@ public:
 
 private slots:
     void onCanFdToggled(bool checked);
+    void onAdapterChanged();
 
 private:
     void scanDevices();
