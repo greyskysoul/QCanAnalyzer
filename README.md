@@ -21,14 +21,14 @@
 
 ## 支持的设备
 
-| 适配器 | 平台 | 说明 |
-|--------|------|------|
-| **PCAN** | Windows | PEAK-System 全系列，需 PCANBasic.dll |
-| **gs_usb** | Windows / Linux | candleLight 等开源 CAN 适配器 |
-| **ZCANFD** | Windows / Linux | ZLG USBCANFD 系列 (CAN FD)，需 ControlCANFD.dll |
-| **ZCAN** | Windows | ZLG USBCAN 系列 (仅标准 CAN)，需 ControlCAN.dll |
-| **SocketCAN** | Linux | 内核原生 CAN 子系统 (can0, vcan0...) |
-| **MockCAN** | 跨平台 | 虚拟适配器，仅 Debug 模式可用，用于无硬件测试 |
+| 适配器        | 平台            | 说明                                            |
+| ------------- | --------------- | ----------------------------------------------- |
+| **PCAN**      | Windows         | PEAK-System 全系列，需 PCANBasic.dll            |
+| **gs_usb**    | Windows / Linux | candleLight 等开源 CAN 适配器                   |
+| **ZCANFD**    | Windows / Linux | ZLG USBCANFD 系列 (CAN FD)，需 ControlCANFD.dll |
+| **ZCAN**      | Windows         | ZLG USBCAN 系列 (仅标准 CAN)，需 ControlCAN.dll |
+| **SocketCAN** | Linux           | 内核原生 CAN 子系统 (can0, vcan0...)            |
+| **MockCAN**   | 跨平台          | 虚拟适配器，仅 Debug 模式可用，用于无硬件测试   |
 
 ### Linux 下 SocketCAN 使用注意
 
@@ -82,30 +82,35 @@ git lfs pull
 ```
 
 **Windows — PCAN 设备**:
+
 ```bash
 # PCANBasic.dll 已通过 Git LFS 存放在 third_party/pcan/ 目录
 # 仍需安装 PEAK 驱动: https://www.peak-system.com
 ```
 
 **Windows — gs_usb 设备**:
+
 ```bash
 # gs_usb (candleLight) 使用 candle API 静态编译，无需外部 DLL
 # 需要安装 WinUSB 驱动 (使用 Zadig 工具: https://zadig.akeo.ie/)
 ```
 
 **Windows — ZCANFD / ZCAN 设备**:
+
 ```bash
 # ControlCANFD.dll / ControlCAN.dll 已通过 Git LFS 存放在 third_party/zcanfd/ 和 third_party/zcan/
 # 需要安装 ZLG USBCAN 驱动 (随设备提供)
 ```
 
 **Linux — ZCANFD 设备**:
+
 ```bash
 # libcontrolcanfd.a 已通过 Git LFS 存放在 third_party/zcanfd/
 # 静态链接，无需额外运行时依赖
 ```
 
 **Linux**:
+
 ```bash
 # Linux 下 gs_usb 和 SocketCAN 均通过内核驱动，无需额外 DLL
 # 确保加载了对应内核模块:
@@ -123,7 +128,7 @@ mingw32-make  # Windows MinGW
 
 ## 项目结构
 
-```
+```plaintext
 QCanAnalyzer/
 ├── QCanAnalyzer.pro           # Qt 工程
 ├── main.cpp                   # 入口 (高DPI + Fusion风格 + 图标)
