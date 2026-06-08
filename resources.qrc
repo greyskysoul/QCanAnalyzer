@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file>icon.png</file>
+        <file>style.qss</file>
+        <file>resources/checkmark.svg</file>
     </qresource>
 </RCC>

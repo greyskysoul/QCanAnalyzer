@@ -152,7 +152,10 @@ void CanSessionWidget::setupUi()
     m_sendDataEdit->setAsciiArea(true);
     m_sendDataEdit->setBytesPerLine(8);
     m_sendDataEdit->setHexCaps(true);
-    m_sendDataEdit->setFixedWidth(qRound(155 * scale));
+    if(scale > 1.0f)
+        m_sendDataEdit->setFixedWidth(qRound(155 * scale));
+    else
+        m_sendDataEdit->setFixedWidth(305);
     // 用默认值 8 字节初始化
     QByteArray initData(8, '\0');
     m_sendDataEdit->setData(initData);
@@ -164,6 +167,11 @@ void CanSessionWidget::setupUi()
     // 连接 DLC 变化 → 自动调整 QHexEdit 数据大小
     connect(ui->sendDlcSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &CanSessionWidget::onSendDlcChanged);
+
+    // 发送通道选择器
+    ui->sendChanCombo->setFixedWidth(qRound(60 * scale));
+    connect(ui->sendChanCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &CanSessionWidget::onSendChannelChanged);
 
     // 帧间隔 SpinBox：0 = 最快速，>0 = 每帧间隔 N ms
     ui->sendPeriodSpin->setRange(0, 10000);
@@ -274,6 +282,7 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
 
     if (m_can->open(channel, baud)) {
         updateUiState(true);
+        refreshSendChannelCombo();
         updateChannelCheckboxes();
         m_statusTimer->start(500);
     }
@@ -295,6 +304,39 @@ bool CanSessionWidget::isConnected() const
 void CanSessionWidget::refreshDevices()
 {
     updateChannelCheckboxes();
+}
+
+void CanSessionWidget::refreshSendChannelCombo()
+{
+    ui->sendChanCombo->blockSignals(true);
+    ui->sendChanCombo->clear();
+
+    if (!m_can || !m_can->isOpen()) {
+        ui->sendChanCombo->setEnabled(false);
+        ui->sendChanCombo->blockSignals(false);
+        return;
+    }
+
+    QList<int> channels = m_can->availableSendChannels();
+    int currentCh = m_can->currentSendChannel();
+
+    for (int ch : channels) {
+        ui->sendChanCombo->addItem(QString("CH%1").arg(ch), ch);
+        if (ch == currentCh)
+            ui->sendChanCombo->setCurrentIndex(ui->sendChanCombo->count() - 1);
+    }
+
+    // 多于1个通道时启用选择器
+    ui->sendChanCombo->setEnabled(channels.size() > 1);
+    ui->sendChanCombo->blockSignals(false);
+}
+
+void CanSessionWidget::onSendChannelChanged(int index)
+{
+    if (!m_can || index < 0) return;
+    int ch = ui->sendChanCombo->itemData(index).toInt();
+    m_can->setSendChannel(ch);
+    m_channelIndex = ch;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -340,6 +382,8 @@ void CanSessionWidget::updateUiState(bool connected)
         ui->connectBtn->setStyleSheet(redBtn);
         ui->baudCombo->setEnabled(false);
         ui->dataBaudCombo->setEnabled(false);
+        // 通道选择器在连接后可切换
+        ui->sendChanCombo->setEnabled(m_can && m_can->availableSendChannels().size() > 1);
     } else {
         ui->statusLabel->setText("未连接");
         ui->statusLabel->setToolTip("");
@@ -348,6 +392,8 @@ void CanSessionWidget::updateUiState(bool connected)
         ui->connectBtn->setStyleSheet(greenBtn);
         ui->baudCombo->setEnabled(true);
         ui->dataBaudCombo->setEnabled(true);
+        ui->sendChanCombo->clear();
+        ui->sendChanCombo->setEnabled(false);
 
         qDeleteAll(m_channelChks);
         m_channelChks.clear();
@@ -359,26 +405,18 @@ void CanSessionWidget::updateChannelCheckboxes()
     qDeleteAll(m_channelChks);
     m_channelChks.clear();
 
-    if (!m_can) return;
+    if (!m_can || !m_can->isOpen()) return;
 
-    QList<CanDeviceInfo> devices = m_can->scanDevices();
-
-    if (devices.isEmpty() && m_currentChannel > 0) {
-        auto *chk = new QCheckBox(QString("CH%1").arg(m_currentChannel & 0x0F));
+    QList<int> channels = m_can->availableSendChannels();
+    for (int ch : channels) {
+        auto *chk = new QCheckBox(QString("CH%1").arg(ch));
         chk->setChecked(true);
-        chk->setToolTip(QString("通道 0x%1").arg(m_currentChannel, 2, 16, QChar('0')));
-        m_channelChks.append(chk);
-        ui->channelChkLayout->addWidget(chk);
-        return;
-    }
-
-    for (const auto &dev : devices) {
-        auto *chk = new QCheckBox(QString("CH%1").arg(dev.channel & 0x0F));
-        chk->setChecked(true);
-        chk->setToolTip(dev.name);
+        chk->setToolTip(QString("通道 %1").arg(ch));
+        chk->setProperty("canChannel", ch);
         m_channelChks.append(chk);
         ui->channelChkLayout->addWidget(chk);
     }
+    ui->channelChkLayout->addStretch();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -425,7 +463,11 @@ void CanSessionWidget::prepareAndStartSend()
 
     m_pendingMsg = CanMessage();
     m_pendingMsg.direction = CanDirection::Tx;
-    m_pendingMsg.channel = m_channelIndex;
+    // 使用当前选中的发送通道
+    if (m_can && m_can->currentSendChannel() >= 0)
+        m_pendingMsg.channel = m_can->currentSendChannel();
+    else
+        m_pendingMsg.channel = m_channelIndex;
 
     QString idText = ui->sendIdEdit->text().trimmed();
     bool ok = false;
@@ -519,6 +561,7 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         m_sendDataEdit->setEnabled(false);
         ui->sendFrameCountSpin->setEnabled(false);
         ui->sendPeriodSpin->setEnabled(false);
+        ui->sendChanCombo->setEnabled(false);
     } else {
         const QString blueBtn = btnStyle +
             "QPushButton { background-color: #2196F3; color: white; }"
@@ -533,6 +576,9 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         m_sendDataEdit->setEnabled(true);
         ui->sendFrameCountSpin->setEnabled(true);
         ui->sendPeriodSpin->setEnabled(true);
+        // 多通道时恢复通道选择
+        bool multiCh = m_can && m_can->availableSendChannels().size() > 1;
+        ui->sendChanCombo->setEnabled(multiCh);
     }
 }
 
@@ -677,6 +723,14 @@ bool CanSessionWidget::passFilter(const CanMessage &msg) const
 void CanSessionWidget::onMessageReceived(const CanMessage &msg)
 {
     if (!passFilter(msg)) return;
+
+    // 检查通道复选框：未使能的通道不显示
+    for (const QCheckBox *chk : m_channelChks) {
+        bool ok = false;
+        int ch = chk->property("canChannel").toInt(&ok);
+        if (ok && ch == msg.channel && !chk->isChecked())
+            return;
+    }
 
     m_rxCount++;
     addMessageToTable(msg);

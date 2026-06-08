@@ -10,8 +10,11 @@
 struct CanDeviceInfo {
     QString name;        // 显示名称
     QString description; // 详细描述
-    int channel = -1;    // 通道号
+    int channel = -1;    // 通道号 (编码: 高字节=设备信息, 低字节=通道)
     int adapterType = 0; // 适配器类型: 0=PCAN, 1=gs_usb, 2=SocketCAN, 3=ZCANFD, 4=ZCAN
+    int deviceType = 0;  // 设备类型代码 (ZCAN: VCI_USBCAN2等)
+    int deviceIndex = 0; // 设备索引号
+    int channelCount = 1;// 设备通道总数
 };
 
 /// 适配器类型
@@ -101,6 +104,15 @@ public:
 
     /// 检查当前连接是否存活 (true=正常, false=已断开)
     virtual bool isAlive() const { return isOpen(); }
+
+    /// 获取可用的发送通道列表 (多通道设备支持)
+    virtual QList<int> availableSendChannels() const { return {}; }
+
+    /// 设置当前发送通道 (多通道设备支持, 返回是否成功)
+    virtual bool setSendChannel(int channel) { Q_UNUSED(channel); return false; }
+
+    /// 获取当前发送通道
+    virtual int currentSendChannel() const { return -1; }
 
 signals:
     /// 收到 CAN 消息

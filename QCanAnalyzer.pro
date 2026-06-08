@@ -33,6 +33,12 @@ INCLUDEPATH += third_party/pcan
 INCLUDEPATH += third_party/zcanfd
 INCLUDEPATH += third_party/zcan
 
+# ZCAN 静态链接 ControlCAN.lib | ZCANFD 导入库 libControlCANFD.a (MinGW gendef+dlltool 生成)
+win32 {
+    LIBS += -L$$PWD/third_party/zcan -lControlCAN
+    LIBS += -L$$PWD/third_party/zcanfd -lControlCANFD
+}
+
 win32 {
     SOURCES += \
         third_party/CandleApiDriver/api/candle.c \

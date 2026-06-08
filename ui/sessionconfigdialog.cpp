@@ -165,13 +165,27 @@ void SessionConfigDialog::scanDevices()
         else
 #endif
             ui->statusLabel->setText("⚠ 未检测到设备，请检查连接和驱动");
+        if (adapterType == static_cast<int>(CanAdapterType::ZCAN)
+            || adapterType == static_cast<int>(CanAdapterType::ZCANFD)) {
+            ui->statusLabel->setToolTip(QStringLiteral(
+                "如已连接ZCAN设备, 请断开所有ZCAN会话后重新扫描"));
+        }
     } else {
         for (const auto &dev : devices) {
-            ui->deviceCombo->addItem(QString("%1  [通道 %2]")
-                .arg(dev.name)
-                .arg(dev.channel), dev.channel);
+            // PCAN 每个通道作为独立设备条目，需要显示通道/状态信息
+            // 其他适配器的设备名本身已包含标识信息
+            if (adapterType == static_cast<int>(CanAdapterType::PCAN)) {
+                ui->deviceCombo->addItem(dev.description, dev.channel);
+            } else {
+                ui->deviceCombo->addItem(dev.name, dev.channel);
+            }
         }
         ui->statusLabel->setText(QString("✓ 检测到 %1 个设备").arg(devices.size()));
+        if (adapterType == static_cast<int>(CanAdapterType::ZCAN)
+            || adapterType == static_cast<int>(CanAdapterType::ZCANFD)) {
+            ui->statusLabel->setToolTip(QStringLiteral(
+                "已连接的ZCAN设备不会被重新扫描\n断开所有ZCAN会话后可获取最新设备列表"));
+        }
     }
 
     int idx = ui->deviceCombo->findText(current, Qt::MatchStartsWith);

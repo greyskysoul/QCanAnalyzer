@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>800</width>
-    <height>500</height>
+    <height>632</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -204,7 +204,7 @@
      </property>
      <widget class="QGroupBox" name="rxGroup">
       <property name="title">
-       <string>接收报文</string>
+       <string>报文显示</string>
       </property>
       <layout class="QVBoxLayout" name="rxLayout">
        <item>
@@ -408,6 +408,29 @@
          <item>
           <layout class="QHBoxLayout" name="txBtnLayout">
            <item>
+            <widget class="QLabel" name="sendChanLabel">
+             <property name="text">
+              <string>发送通道:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="sendChanCombo">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>60</width>
+               <height>0</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QLabel" name="sendPeriodLabel">
              <property name="text">
               <string>帧间隔:</string>
@@ -464,6 +487,19 @@
             </spacer>
            </item>
           </layout>
+         </item>
+         <item>
+          <spacer name="verticalSpacer">
+           <property name="orientation">
+            <enum>Qt::Vertical</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>20</width>
+             <height>40</height>
+            </size>
+           </property>
+          </spacer>
          </item>
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_2">

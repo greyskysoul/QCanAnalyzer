@@ -4,16 +4,17 @@
 #include <QDateTime>
 #include <cstring>
 
-// ═══════════════════════════════════════════════════════════════
-// 构造 / 析构
-// ═══════════════════════════════════════════════════════════════
+int ZcanFdAdapter::s_openCount = 0;
+QSet<UINT> ZcanFdAdapter::s_openDeviceIndices = {};
+QList<CanDeviceInfo> ZcanFdAdapter::s_cachedDevices = {};
+
+// ══════════════════════════════════════════════════════════════�?
+// 构�?/ 析构
+// ══════════════════════════════════════════════════════════════�?
 
 ZcanFdAdapter::ZcanFdAdapter(QObject *parent)
     : CanInterface(parent)
 {
-#ifdef Q_OS_WIN
-    loadLibrary();
-#endif
 }
 
 ZcanFdAdapter::~ZcanFdAdapter()
@@ -24,99 +25,26 @@ ZcanFdAdapter::~ZcanFdAdapter()
         m_readTimer = nullptr;
     }
     close();
-#ifdef Q_OS_WIN
-    if (m_loaded) {
-        unloadLibrary();
-    } else if (m_library) {
-        delete m_library;
-        m_library = nullptr;
-    }
-#endif
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Windows: 动态加载 ControlCANFD.dll
-// ═══════════════════════════════════════════════════════════════
-
-#ifdef Q_OS_WIN
-
-bool ZcanFdAdapter::loadLibrary()
-{
-    if (m_loaded) return true;
-
-    // 尝试从 exe 同目录或 third_party/zcanfd/ 加载
-    m_library = new QLibrary("ControlCANFD");
-    if (!m_library->load()) {
-        // 尝试带路径加载
-        m_library->setFileName("third_party/zcanfd/ControlCANFD.dll");
-        if (!m_library->load()) {
-            qWarning() << "ControlCANFD.dll 加载失败 (无ZCANFD驱动):" << m_library->errorString();
-            delete m_library;
-            m_library = nullptr;
-            return false;
-        }
-    }
-
-    m_openDevice       = (ZCAN_OpenDevice_t)       m_library->resolve("ZCAN_OpenDevice");
-    m_closeDevice      = (ZCAN_CloseDevice_t)      m_library->resolve("ZCAN_CloseDevice");
-    m_getDeviceInf     = (ZCAN_GetDeviceInf_t)     m_library->resolve("ZCAN_GetDeviceInf");
-    m_initCAN          = (ZCAN_InitCAN_t)          m_library->resolve("ZCAN_InitCAN");
-    m_startCAN         = (ZCAN_StartCAN_t)         m_library->resolve("ZCAN_StartCAN");
-    m_resetCAN         = (ZCAN_ResetCAN_t)         m_library->resolve("ZCAN_ResetCAN");
-    m_clearBuffer      = (ZCAN_ClearBuffer_t)      m_library->resolve("ZCAN_ClearBuffer");
-    m_getReceiveNum    = (ZCAN_GetReceiveNum_t)    m_library->resolve("ZCAN_GetReceiveNum");
-    m_transmit         = (ZCAN_Transmit_t)         m_library->resolve("ZCAN_Transmit");
-    m_receive          = (ZCAN_Receive_t)          m_library->resolve("ZCAN_Receive");
-    m_transmitFD       = (ZCAN_TransmitFD_t)       m_library->resolve("ZCAN_TransmitFD");
-    m_receiveFD        = (ZCAN_ReceiveFD_t)        m_library->resolve("ZCAN_ReceiveFD");
-    m_setBaudRateCustom= (ZCAN_SetBaudRateCustom_t) m_library->resolve("ZCAN_SetBaudRateCustom");
-
-    if (!m_openDevice || !m_closeDevice || !m_initCAN || !m_startCAN
-        || !m_transmit || !m_receive) {
-        qWarning() << "ControlCANFD.dll 函数解析失败";
-        unloadLibrary();
-        return false;
-    }
-
-    m_loaded = true;
-    return true;
-}
-
-void ZcanFdAdapter::unloadLibrary()
-{
-    if (m_library) {
-        m_library->unload();
-        delete m_library;
-        m_library = nullptr;
-    }
-    m_openDevice = nullptr;
-    m_closeDevice = nullptr;
-    m_getDeviceInf = nullptr;
-    m_initCAN = nullptr;
-    m_startCAN = nullptr;
-    m_resetCAN = nullptr;
-    m_clearBuffer = nullptr;
-    m_getReceiveNum = nullptr;
-    m_transmit = nullptr;
-    m_receive = nullptr;
-    m_transmitFD = nullptr;
-    m_receiveFD = nullptr;
-    m_setBaudRateCustom = nullptr;
-    m_loaded = false;
-}
-
-#endif // Q_OS_WIN
-
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 // 扫描设备
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 
 QList<CanDeviceInfo> ZcanFdAdapter::scanDevices()
 {
+    if (s_openCount > 0) {
+        // 过滤掉已被其他会话占用的设备, 防止重复打开
+        QList<CanDeviceInfo> filtered;
+        for (const auto &dev : s_cachedDevices) {
+            if (!s_openDeviceIndices.contains(static_cast<UINT>(dev.deviceIndex)))
+                filtered.append(dev);
+        }
+        return filtered;
+    }
+
     QList<CanDeviceInfo> devices;
 
-#ifndef Q_OS_WIN
-    // Linux: 静态链接, 直接调用 API
     for (UINT devIdx = 0; devIdx < USBCANFD_MAX_NUM; ++devIdx) {
         DEVICE_HANDLE dh = ZCAN_OpenDevice(USBCANFD_200U, devIdx, 0);
         if (!dh || dh == INVALID_DEVICE_HANDLE)
@@ -126,83 +54,46 @@ QList<CanDeviceInfo> ZcanFdAdapter::scanDevices()
         memset(&info, 0, sizeof(info));
         UINT ret = ZCAN_GetDeviceInf(dh, &info);
         if (ret == STATUS_OK) {
-            info.str_Serial_Num[sizeof(info.str_Serial_Num) - 1] = '\0';
-            info.str_hw_Type[sizeof(info.str_hw_Type) - 1] = '\0';
-
-            for (UINT ch = 0; ch < info.can_Num; ++ch) {
-                CanDeviceInfo devInfo;
-                // 编码: 高字节=设备索引, 低字节=通道号
-                devInfo.channel = (devIdx << 8) | ch;
-                devInfo.adapterType = static_cast<int>(CanAdapterType::ZCANFD);
-                devInfo.name = QString("ZCANFD #%1 CH%2").arg(devIdx).arg(ch);
-                devInfo.description = QString("%1 SN:%2 [CH%3]")
-                    .arg((const char*)info.str_hw_Type)
-                    .arg((const char*)info.str_Serial_Num)
-                    .arg(ch);
-                devices.append(devInfo);
-            }
+            info.str_Serial_Num[sizeof(info.str_Serial_Num)-1] = '\0';
+            info.str_hw_Type[sizeof(info.str_hw_Type)-1] = '\0';
+            int cc = (info.can_Num > 0 && info.can_Num <= 8) ? info.can_Num : 2;
+            CanDeviceInfo di;
+            di.channel = static_cast<int>(devIdx << 8);
+            di.adapterType = static_cast<int>(CanAdapterType::ZCANFD);
+            di.deviceType = USBCANFD_200U;
+            di.deviceIndex = static_cast<int>(devIdx);
+            di.channelCount = cc;
+            di.name = QString("ZCANFD #%1").arg(devIdx);
+            di.description = QString("%1 SN:%2")
+                .arg((const char*)info.str_hw_Type)
+                .arg((const char*)info.str_Serial_Num);
+            devices.append(di);
         }
         ZCAN_CloseDevice(dh);
     }
-#else
-    // Windows: 使用动态加载的函数指针
-    if (!m_loaded) return devices;
 
-    for (UINT devIdx = 0; devIdx < USBCANFD_MAX_NUM; ++devIdx) {
-        DEVICE_HANDLE dh = m_openDevice(USBCANFD_200U, devIdx, 0);
-        if (!dh || dh == INVALID_DEVICE_HANDLE)
-            continue;
-
-        ZCAN_DEVICE_INFO info;
-        memset(&info, 0, sizeof(info));
-        if (m_getDeviceInf) {
-            UINT ret = m_getDeviceInf(dh, &info);
-            if (ret == STATUS_OK) {
-                info.str_Serial_Num[sizeof(info.str_Serial_Num) - 1] = '\0';
-                info.str_hw_Type[sizeof(info.str_hw_Type) - 1] = '\0';
-
-                for (UINT ch = 0; ch < info.can_Num; ++ch) {
-                    CanDeviceInfo devInfo;
-                    devInfo.channel = (devIdx << 8) | ch;
-                    devInfo.adapterType = static_cast<int>(CanAdapterType::ZCANFD);
-                    devInfo.name = QString("ZCANFD #%1 CH%2").arg(devIdx).arg(ch);
-                    devInfo.description = QString("%1 SN:%2 [CH%3]")
-                        .arg((const char*)info.str_hw_Type)
-                        .arg((const char*)info.str_Serial_Num)
-                        .arg(ch);
-                    devices.append(devInfo);
-                }
-            }
-        }
-        m_closeDevice(dh);
-    }
-#endif
-
+    s_cachedDevices = devices;
     return devices;
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 // 打开 / 关闭
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 
-UINT ZcanFdAdapter::baudToTiming(CanBaudRate baud) const
+UINT ZcanFdAdapter::baudToHz(CanBaudRate baud) const
 {
-    // ZCANFD CAN FD 使用 timing 值 (与 SJA1000 兼容)
-    // 格式: 低16位=arbitration timing, 高16位=data timing
-    // timing0: SJW(7:6) | BRP(5:0)
-    // timing1: SAM(7) | TSEG2(6:4) | TSEG1(3:0)
     switch (baud) {
-    case CanBaudRate::BR_1M:   return 0x00140014;  // 1M
-    case CanBaudRate::BR_800K: return 0x00160016;  // 800K
-    case CanBaudRate::BR_500K: return 0x001C001C;  // 500K
-    case CanBaudRate::BR_250K: return 0x011C011C;  // 250K
-    case CanBaudRate::BR_125K: return 0x031C031C;  // 125K
-    case CanBaudRate::BR_100K: return 0x432F432F;  // 100K
-    case CanBaudRate::BR_50K:  return 0x472F472F;  // 50K
-    case CanBaudRate::BR_20K:  return 0x532F532F;  // 20K
-    case CanBaudRate::BR_10K:  return 0x672F672F;  // 10K
-    case CanBaudRate::BR_5K:   return 0x7F7F7F7F;  // 5K
-    default: return 0x001C001C;
+    case CanBaudRate::BR_1M:   return 1000000;
+    case CanBaudRate::BR_800K: return 800000;
+    case CanBaudRate::BR_500K: return 500000;
+    case CanBaudRate::BR_250K: return 250000;
+    case CanBaudRate::BR_125K: return 125000;
+    case CanBaudRate::BR_100K: return 100000;
+    case CanBaudRate::BR_50K:  return 50000;
+    case CanBaudRate::BR_20K:  return 20000;
+    case CanBaudRate::BR_10K:  return 10000;
+    case CanBaudRate::BR_5K:   return 5000;
+    default: return 500000;
     }
 }
 
@@ -213,107 +104,127 @@ bool ZcanFdAdapter::open(int channel, CanBaudRate baud)
     UINT devIdx = (channel >> 8) & 0xFF;
     UINT chIdx  = channel & 0xFF;
 
-    // ── 打开设备 ──
-#ifndef Q_OS_WIN
+    // ── 重复打开检测: 同一设备索引只能被一个实例打开 ──
+    if (s_openDeviceIndices.contains(devIdx)) {
+        emit errorOccurred(QString("ZCANFD: 设备 #%1 已被打开, 不能重复打开").arg(devIdx));
+        return false;
+    }
+
+    // ── 1. 打开设备 ──
     m_devHandle = ZCAN_OpenDevice(m_deviceType, devIdx, 0);
-#else
-    if (!m_loaded) return false;
-    m_devHandle = m_openDevice(m_deviceType, devIdx, 0);
-#endif
 
     if (!m_devHandle || m_devHandle == INVALID_DEVICE_HANDLE) {
         emit errorOccurred(QString("ZCANFD: 打开设备 #%1 失败").arg(devIdx));
         return false;
     }
 
-    // ── 初始化 CAN 通道 ──
-    ZCAN_CHANNEL_INIT_CONFIG initConfig;
-    memset(&initConfig, 0, sizeof(initConfig));
-    initConfig.can_type = TYPE_CAN; // 默认标准 CAN, 后续根据需要切换 CAN FD
-    initConfig.canfd.abit_timing = baudToTiming(baud);
-    initConfig.canfd.dbit_timing = baudToTiming(CanBaudRate::BR_1M); // 数据域默认 1M
-    initConfig.canfd.acc_code = 0;
-    initConfig.canfd.acc_mask = 0xFFFFFFFF;
-    initConfig.canfd.filter = 1;  // 接收所有帧
-    initConfig.canfd.mode = 0;    // 正常模式
-
-#ifndef Q_OS_WIN
-    m_chHandle = ZCAN_InitCAN(m_devHandle, chIdx, &initConfig);
-#else
-    m_chHandle = m_initCAN(m_devHandle, chIdx, &initConfig);
-#endif
-
-    if (!m_chHandle || m_chHandle == INVALID_CHANNEL_HANDLE) {
-        emit errorOccurred(QString("ZCANFD: 初始化 CAN 通道 %1 失败").arg(chIdx));
-#ifndef Q_OS_WIN
-        ZCAN_CloseDevice(m_devHandle);
-#else
-        m_closeDevice(m_devHandle);
-#endif
-        m_devHandle = nullptr;
-        return false;
-    }
-
-    // ── 启动 CAN ──
-    UINT ret;
-#ifndef Q_OS_WIN
-    ret = ZCAN_StartCAN(m_chHandle);
-#else
-    ret = m_startCAN(m_chHandle);
-#endif
-
-    if (ret != STATUS_OK) {
-        emit errorOccurred(QString("ZCANFD: 启动 CAN 通道 %1 失败 (0x%2)")
-                           .arg(chIdx).arg(ret, 4, 16, QChar('0')));
-#ifndef Q_OS_WIN
-        ZCAN_CloseDevice(m_devHandle);
-#else
-        m_closeDevice(m_devHandle);
-#endif
-        m_devHandle = nullptr;
-        m_chHandle = nullptr;
-        return false;
-    }
-
     m_deviceIndex = devIdx;
-    m_canIndex = chIdx;
-    m_opened = true;
 
-    // ── 启动读取轮询 ──
+    // ── 获取通道信息 ──
+    ZCAN_DEVICE_INFO info;
+    memset(&info, 0, sizeof(info));
+    UINT infoRet = ZCAN_GetDeviceInf(m_devHandle, &info);
+    if (infoRet == STATUS_OK && info.can_Num > 0 && info.can_Num <= 8)
+        m_totalChannels = info.can_Num;
+    else
+        m_totalChannels = 2;
+
+    // ── 2. 设置 CANFD 标准 (ISO) ──
+    UINT baudHz = baudToHz(baud);
+    UINT dataBaudHz = 2000000;  // 数据域默认 2MHz
+    for (int ch = 0; ch < m_totalChannels; ++ch) {
+        ZCAN_SetCANFDStandard(m_devHandle, static_cast<UINT>(ch), 0);  // 0=ISO
+        ZCAN_SetAbitBaud(m_devHandle, static_cast<UINT>(ch), baudHz);
+        ZCAN_SetDbitBaud(m_devHandle, static_cast<UINT>(ch), dataBaudHz);
+    }
+
+    // ── 3. 初始化所有通道 (can_type=TYPE_CANFD, 波特率由上面 API 设定) ──
+    m_openChannels.clear();
+    for (int ch = 0; ch < m_totalChannels; ++ch) {
+        ZCAN_CHANNEL_INIT_CONFIG initConfig;
+        memset(&initConfig, 0, sizeof(initConfig));
+        initConfig.can_type = TYPE_CANFD;  // 必须用 CANFD 模式, 参照官方例程
+        initConfig.canfd.mode = 0;         // 0=正常模式
+
+        CHANNEL_HANDLE chHandle = ZCAN_InitCAN(m_devHandle, static_cast<UINT>(ch), &initConfig);
+
+        if (!chHandle || chHandle == INVALID_CHANNEL_HANDLE) {
+            qWarning() << "[ZCANFD] InitCAN ch" << ch << "failed";
+            if (ch == static_cast<int>(chIdx)) {
+                emit errorOccurred(QString("ZCANFD: 初始化 CAN 通道 %1 失败").arg(ch));
+                close();
+                return false;
+            }
+            continue;
+        }
+
+        // ── 4. 使能终端电阻 ──
+        ZCAN_SetResistanceEnable(m_devHandle, static_cast<UINT>(ch), 1);
+
+        // ── 5. 启动 CAN ──
+        UINT ret = ZCAN_StartCAN(chHandle);
+        if (ret != STATUS_OK) {
+            qWarning() << "[ZCANFD] StartCAN ch" << ch << "failed, ret=" << Qt::hex << ret;
+            if (ch == static_cast<int>(chIdx)) {
+                emit errorOccurred(QString("ZCANFD: 启动 CAN 通道 %1 失败").arg(ch));
+                close();
+                return false;
+            }
+            continue;
+        }
+
+        // ── 6. 清空缓冲区 ──
+        ZCAN_ClearBuffer(chHandle);
+
+        ChannelInfo ci;
+        ci.handle = chHandle;
+        ci.chIdx = static_cast<UINT>(ch);
+        ci.baud = baud;
+        m_openChannels.append(ci);
+    }
+
+    if (m_openChannels.isEmpty()) { close(); return false; }
+
+    m_canIndex = chIdx;
+    { bool f = false;
+      for (auto &c : m_openChannels) if (c.chIdx == chIdx) { f = true; break; }
+      if (!f) m_canIndex = m_openChannels.first().chIdx; }
+
+    m_opened = true;
+    ++s_openCount;
+    s_openDeviceIndices.insert(m_deviceIndex);
+
     if (!m_readTimer) {
         m_readTimer = new QTimer(this);
         connect(m_readTimer, &QTimer::timeout, this, &ZcanFdAdapter::onReadTimer);
     }
-    m_readTimer->start(1); // 1ms 轮询
+    m_readTimer->start(1);
 
     return true;
 }
 
 void ZcanFdAdapter::close()
 {
+    if (!m_opened) return;
+
     if (m_readTimer) {
         m_readTimer->stop();
     }
 
-    if (m_chHandle) {
-#ifndef Q_OS_WIN
-        ZCAN_ResetCAN(m_chHandle);
-#else
-        if (m_resetCAN) m_resetCAN(m_chHandle);
-#endif
-        m_chHandle = nullptr;
+    for (auto &ci : m_openChannels) {
+        if (ci.handle)
+            ZCAN_ResetCAN(ci.handle);
     }
+    m_openChannels.clear();
 
     if (m_devHandle) {
-#ifndef Q_OS_WIN
         ZCAN_CloseDevice(m_devHandle);
-#else
-        if (m_closeDevice) m_closeDevice(m_devHandle);
-#endif
         m_devHandle = nullptr;
     }
 
     m_opened = false;
+    s_openDeviceIndices.remove(m_deviceIndex);
+    if (s_openCount > 0) --s_openCount;
 }
 
 bool ZcanFdAdapter::isOpen() const
@@ -324,46 +235,33 @@ bool ZcanFdAdapter::isOpen() const
 bool ZcanFdAdapter::isAlive() const
 {
     if (!m_opened || !m_devHandle) return false;
-
-#ifndef Q_OS_WIN
-    UINT ret = ZCAN_IsDeviceOnLine(m_devHandle);
-    return (ret == STATUS_ONLINE || ret == STATUS_OK);
-#else
-    // Windows DLL 没有直接导出 IsDeviceOnLine, 通过发送/接收间接判断
     return m_opened;
-#endif
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 // 读取轮询
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 
 void ZcanFdAdapter::onReadTimer()
 {
-    if (!m_opened || !m_chHandle) return;
-
-    // 先尝试 CAN FD 接收, 再尝试标准 CAN 接收
+    if (!m_opened) return;
     pollMessages();
 }
 
 void ZcanFdAdapter::pollMessages()
 {
-    // ── 尝试 CAN FD 接收 ──
+    for (const auto &ci : m_openChannels) {
+        CHANNEL_HANDLE handle = ci.handle;
+        if (!handle) continue;
     ZCAN_ReceiveFD_Data fdData[16];
     memset(fdData, 0, sizeof(fdData));
 
-#ifndef Q_OS_WIN
-    UINT fdCount = ZCAN_ReceiveFD(m_chHandle, fdData, 16, 0); // 0ms 超时
-#else
-    UINT fdCount = 0;
-    if (m_receiveFD)
-        fdCount = m_receiveFD(m_chHandle, fdData, 16, 0);
-#endif
+    UINT fdCount = ZCAN_ReceiveFD(handle, fdData, 16, 0);
 
     for (UINT i = 0; i < fdCount; ++i) {
         CanMessage msg;
         msg.direction = CanDirection::Rx;
-        msg.channel = m_canIndex;
+        msg.channel = static_cast<int>(ci.chIdx);
         msg.timestamp = QDateTime::currentDateTime();
 
         UINT canId = fdData[i].frame.can_id;
@@ -393,16 +291,12 @@ void ZcanFdAdapter::pollMessages()
     ZCAN_Receive_Data canData[16];
     memset(canData, 0, sizeof(canData));
 
-#ifndef Q_OS_WIN
-    UINT canCount = ZCAN_Receive(m_chHandle, canData, 16, 0);
-#else
-    UINT canCount = m_receive(m_chHandle, canData, 16, 0);
-#endif
+    UINT canCount = ZCAN_Receive(handle, canData, 16, 0);
 
     for (UINT i = 0; i < canCount; ++i) {
         CanMessage msg;
         msg.direction = CanDirection::Rx;
-        msg.channel = m_canIndex;
+        msg.channel = static_cast<int>(ci.chIdx);
         msg.timestamp = QDateTime::currentDateTime();
 
         UINT canId = canData[i].frame.can_id;
@@ -426,21 +320,31 @@ void ZcanFdAdapter::pollMessages()
 
         emit messageReceived(msg);
     }
-}
+    }  // close for (const auto &ci : m_openChannels)
+}  // close pollMessages()
 
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 // 发送
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 
 bool ZcanFdAdapter::sendMessage(const CanMessage &msg)
 {
-    if (!m_opened || !m_chHandle) return false;
+    if (!m_opened || m_openChannels.isEmpty()) return false;
+
+    CHANNEL_HANDLE targetHandle = nullptr;
+    for (const auto &ci : m_openChannels) {
+        if (static_cast<int>(ci.chIdx) == msg.channel || ci.chIdx == m_canIndex) {
+            targetHandle = ci.handle;
+            break;
+        }
+    }
+    if (!targetHandle) targetHandle = m_openChannels.first().handle;
 
     if (msg.isFd && msg.dlc > 8) {
-        // ── CAN FD 发送 ──
+        // ── CAN FD 发�?──
         ZCAN_TransmitFD_Data fdData;
         memset(&fdData, 0, sizeof(fdData));
-        fdData.transmit_type = 0; // 正常发送
+        fdData.transmit_type = 0; // 正常发�?
 
         UINT flags = 0;
         if (msg.type == CanFrameType::ExtendedData)
@@ -454,17 +358,13 @@ bool ZcanFdAdapter::sendMessage(const CanMessage &msg)
             fdData.frame.data[j] = msg.data[j];
 
         UINT ret;
-#ifndef Q_OS_WIN
-        ret = ZCAN_TransmitFD(m_chHandle, &fdData, 1);
-#else
-        ret = m_transmitFD ? m_transmitFD(m_chHandle, &fdData, 1) : STATUS_ERR;
-#endif
+        ret = ZCAN_TransmitFD(targetHandle, &fdData, 1);
         if (ret != STATUS_OK) {
-            emit errorOccurred(QString("ZCANFD: CAN FD 发送失败 (0x%1)").arg(ret, 4, 16, QChar('0')));
+            emit errorOccurred(QString("ZCANFD: CAN FD 发送失�?(0x%1)").arg(ret, 4, 16, QChar('0')));
             return false;
         }
     } else {
-        // ── 标准 CAN 发送 ──
+        // ── 标准 CAN 发�?──
         ZCAN_Transmit_Data canData;
         memset(&canData, 0, sizeof(canData));
         canData.transmit_type = 0;
@@ -481,13 +381,9 @@ bool ZcanFdAdapter::sendMessage(const CanMessage &msg)
             canData.frame.data[j] = msg.data[j];
 
         UINT ret;
-#ifndef Q_OS_WIN
-        ret = ZCAN_Transmit(m_chHandle, &canData, 1);
-#else
-        ret = m_transmit(m_chHandle, &canData, 1);
-#endif
+        ret = ZCAN_Transmit(targetHandle, &canData, 1);
         if (ret != STATUS_OK) {
-            emit errorOccurred(QString("ZCANFD: 发送失败 (0x%1)").arg(ret, 4, 16, QChar('0')));
+            emit errorOccurred(QString("ZCANFD: 发送失�?(0x%1)").arg(ret, 4, 16, QChar('0')));
             return false;
         }
     }
@@ -495,15 +391,36 @@ bool ZcanFdAdapter::sendMessage(const CanMessage &msg)
     return true;
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
+// 多通道支持
+// ══════════════════════════════════════════════════════════════�?
+
+QList<int> ZcanFdAdapter::availableSendChannels() const
+{
+    QList<int> chs;
+    int n = m_totalChannels > 0 ? m_totalChannels : 1;
+    for (int i = 0; i < n; ++i) chs.append(i);
+    return chs;
+}
+
+bool ZcanFdAdapter::setSendChannel(int ch)
+{
+    if (ch < 0 || ch >= m_totalChannels) return false;
+    for (const auto &ci : m_openChannels)
+        if (static_cast<int>(ci.chIdx) == ch) { m_canIndex = static_cast<UINT>(ch); return true; }
+    return false;
+}
+
+int ZcanFdAdapter::currentSendChannel() const { return static_cast<int>(m_canIndex); }
+
+// ══════════════════════════════════════════════════════════════�?
 // 辅助
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
 
 QString ZcanFdAdapter::channelName(int channel)
 {
     UINT devIdx = (channel >> 8) & 0xFF;
-    UINT chIdx  = channel & 0xFF;
-    return QString("ZCANFD#%1_CH%2").arg(devIdx).arg(chIdx);
+    return QString("ZCANFD #%1").arg(devIdx);
 }
 
 QString ZcanFdAdapter::errorText(UINT err)
@@ -517,3 +434,4 @@ QString ZcanFdAdapter::errorText(UINT err)
     default: return QString("0x%1").arg(err, 8, 16, QChar('0'));
     }
 }
+

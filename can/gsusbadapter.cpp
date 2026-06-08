@@ -432,7 +432,6 @@ bool GsUsbAdapter::isAlive() const
 QString GsUsbAdapter::channelName(int channel)
 {
     int dev = (channel >> 8) & 0xFF;
-    int ch = channel & 0xFF;
-    return QString("candleLight #%1 CH%2").arg(dev).arg(ch);
+    return QString("candleLight #%1").arg(dev);
 }
 

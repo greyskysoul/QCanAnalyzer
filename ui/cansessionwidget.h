@@ -90,6 +90,7 @@ private slots:
     void onSaveClicked();
     void onMessageReceived(const CanMessage &msg);
     void onFilterChanged();
+    void onSendChannelChanged(int index);
 
 private:
     void setupUi();
@@ -97,6 +98,7 @@ private:
     void addMessageToTable(const CanMessage &msg);
     void updateStats();
     void updateChannelCheckboxes();
+    void refreshSendChannelCombo();
     void onStatusCheck();
     void updateUiState(bool connected);
     void stopSending();

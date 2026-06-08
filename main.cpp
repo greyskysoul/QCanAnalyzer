@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QStyleFactory>
 #include <QIcon>
+#include <QFile>
 
 int main(int argc, char *argv[])
 {
@@ -27,6 +28,13 @@ int main(int argc, char *argv[])
 #endif
     font.setHintingPreference(QFont::PreferFullHinting);
     a.setFont(font);
+
+    // 加载全局样式表
+    QFile styleFile(":/style.qss");
+    if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
+        a.setStyleSheet(QString::fromUtf8(styleFile.readAll()));
+        styleFile.close();
+    }
 
     MainWindow w;
     w.show();
