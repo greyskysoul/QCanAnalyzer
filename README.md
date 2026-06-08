@@ -1,21 +1,23 @@
 # QCanAnalyzer — CAN 总线调试分析工具
 
-> ⚠️ **AI 声明**: 本项目 100% 由 GitHub Copilot (DeepSeek V4 Pro) 在 VS Code 中生成，包括但不限于：工程结构设计、PCAN/gs_usb/ZCANFD/ZCAN/SocketCAN 多适配器架构、Qt Advanced Docking System 集成、所有 UI 布局与样式、CAN 报文收发逻辑。人工仅负责提出需求和编译验证。
+> ⚠️ **AI 声明**: 本项目 100% 由 GitHub Copilot (DeepSeek V4 Pro) 在 VS Code 中生成，包括但不限于：工程结构设计、PCAN/gs_usb/ZCANFD/ZCAN/SocketCAN/MockCAN 多适配器架构、Qt Advanced Docking System 集成、所有 UI 布局与样式、CAN 报文收发逻辑。人工仅负责提出需求和编译验证。
 
 ---
 
 ## 功能特性
 
-- 🔌 **多设备支持** — PCAN (PEAK USB/PCI)、gs_usb (candleLight)、ZCANFD/ZCAN (ZLG USBCANFD)、SocketCAN (Linux)
-- 🐧 **跨平台** — Windows + Linux，Linux 下原生支持 SocketCAN
+- 🔌 **多设备支持** — PCAN (PEAK USB/PCI)、gs_usb (candleLight)、ZCANFD/ZCAN (ZLG USBCANFD)、SocketCAN (Linux)、MockCAN (虚拟)
+- 🐧 **跨平台** — Windows + Linux，Linux 下原生支持 SocketCAN，自动隐藏不可用适配器
 - 🪟 **多会话停靠** — 基于 Qt Advanced Docking System，同时开启多个 CAN 会话，标签页分组
 - 📡 **CAN-FD 支持** — DLC 0~64，数据输入框支持 64 字节十六进制数据
-- 📥 **灵活发送** — 标准帧/扩展帧/远程帧；周期发送（锁定周期防误触）；指定帧数批量发送；发送中可随时停止
+- 📥 **灵活发送** — 标准帧/扩展帧/远程帧；周期发送（锁定周期防误触）；指定帧数批量发送；发送中可随时打断
 - 🔢 **十六进制输入** — 数据输入自动过滤非法字符，仅保留 0-9、A-F、空格
+- 🔍 **软过滤器** — ID 掩码过滤 + 通道使能复选框，可灵活筛选关注的报文
 - 📊 **通道识别** — 报文列表显示通道列，多通道设备可区分来源
 - 💾 **CSV 导出** — 一键保存所有收发帧为 CSV（含通道信息）
-- 🔍 **断线检测** — 500ms 间隔监控设备连接，gs_usb 支持自动通道恢复
+- 🔗 **断线检测** — 500ms 间隔监控设备连接，gs_usb 支持自动通道恢复；ZCANFD 防重复打开保护
 - 🎨 **高 DPI 适配** — 175% 缩放正常
+- 🧪 **MockCAN 虚拟适配器** — Debug 模式下自动可用，无需硬件即可测试和演示
 
 ## 支持的设备
 
@@ -26,6 +28,7 @@
 | **ZCANFD** | Windows / Linux | ZLG USBCANFD 系列 (CAN FD)，需 ControlCANFD.dll |
 | **ZCAN** | Windows | ZLG USBCAN 系列 (仅标准 CAN)，需 ControlCAN.dll |
 | **SocketCAN** | Linux | 内核原生 CAN 子系统 (can0, vcan0...) |
+| **MockCAN** | 跨平台 | 虚拟适配器，仅 Debug 模式可用，用于无硬件测试 |
 
 ### Linux 下 SocketCAN 使用注意
 
@@ -136,15 +139,16 @@ QCanAnalyzer/
 │   ├── zcanfdadapter.h/.cpp   # ZCANFD 适配器 (ZLG USBCANFD, CAN FD)
 │   ├── zcanadapter.h/.cpp     # ZCAN 适配器 (ZLG USBCAN, 仅标准 CAN)
 │   ├── socketcanadapter.h/.cpp # SocketCAN 适配器 (Linux, QSocketNotifier)
+│   ├── mockcanadapter.h/.cpp  # MockCAN 虚拟适配器 (Debug 模式, 随机报文模拟)
 │   └── CandleApiDriver/       # candle API 静态库驱动
 ├── third_party/
 │   ├── pcan/PCANBasic.dll     # PCAN Basic API (Git LFS)
 │   ├── zcanfd/                # ZCANFD SDK (Git LFS)
 │   └── zcan/                  # ZCAN (VCI) SDK (Git LFS)
 ├── ui/
-│   ├── welcomewidget.h/.cpp/.ui  # 欢迎页
-│   ├── sessionconfigdialog.h/.cpp/.ui # 新建会话对话框
-│   └── cansessionwidget.h/.cpp/.ui   # CAN 会话面板 (收发/表格/CSV导出)
+│   ├── welcomewidget.h/.cpp/.ui        # 欢迎页
+│   ├── sessionconfigdialog.h/.cpp/.ui   # 新建会话对话框 (设备/通道/波特率/CAN-FD)
+│   └── cansessionwidget.h/.cpp/.ui     # CAN 会话面板 (收发/表格/软过滤/CSV导出)
 └── libs/
     └── Qt-Advanced-Docking-System/  # (需自行克隆)
 ```

@@ -5,10 +5,12 @@
 ## 功能特性
 
 - 🪟 **多会话停靠框架** — 基于 qt-advanced-docking-system，同时打开多个 CAN 会话，自由拖拽布局
-- 🔌 **多设备支持** — PCAN、gs_usb (candleLight)、ZCANFD (ZLG USBCANFD)、ZCAN (ZLG USBCAN)、SocketCAN (Linux)
+- 🔌 **多设备支持** — PCAN、gs_usb (candleLight)、ZCANFD (ZLG USBCANFD)、ZCAN (ZLG USBCAN)、SocketCAN (Linux)、MockCAN (虚拟)
 - 📡 **CAN-FD 支持** — CAN FD 帧收发 (DLC 0~64)，ZCANFD 适配器原生支持
-- 📥 **报文收发** — 接收 CAN 报文实时显示，支持周期/批量发送
-- 📊 **报文表格** — 时间戳、ID、类型、DLC、数据一目了然
+- 📥 **报文收发** — 接收 CAN 报文实时显示，支持周期/批量/指定帧数发送，发送中可随时打断
+- 📊 **报文表格** — 时间戳、方向、ID、通道、类型、DLC、数据一目了然
+- 🔍 **软过滤器** — ID 掩码过滤 + 通道使能复选框，灵活筛选报文
+- 🧪 **MockCAN 虚拟适配器** — Debug 模式下自动可用，无需硬件即可测试
 
 ## 构建步骤
 
@@ -92,21 +94,24 @@ QCanAnalyzer/
 ├── main.cpp                  # 入口
 ├── mainwindow.h / .cpp / .ui # 主窗口 (含 docking 框架)
 ├── can/
-│   ├── canmessage.h          # CAN 消息数据结构
-│   ├── caninterface.h        # CAN 接口抽象基类
-│   ├── canmanager.h/.cpp     # 多会话管理器
-│   ├── pcanadapter.h/.cpp    # PCAN 设备适配器
-│   ├── gsusbadapter.h/.cpp   # gs_usb 适配器
-│   ├── zcanfdadapter.h/.cpp  # ZCANFD 适配器 (CAN FD)
-│   ├── zcanadapter.h/.cpp    # ZCAN 适配器 (VCI API)
-│   ├── socketcanadapter.h/.cpp # SocketCAN 适配器
+│   ├── canmessage.h          # CAN 消息数据结构 (CAN-FD 64字节, 通道号)
+│   ├── caninterface.h        # CAN 接口抽象基类 + 波特率工具
+│   ├── canmanager.h/.cpp     # 多会话管理器 (标签组管理)
+│   ├── pcanadapter.h/.cpp    # PCAN 设备适配器 (动态加载 PCANBasic.dll)
+│   ├── gsusbadapter.h/.cpp   # gs_usb 适配器 (candleLight, bittiming 自动搜索)
+│   ├── zcanfdadapter.h/.cpp  # ZCANFD 适配器 (CAN FD, 多通道, 防重复打开)
+│   ├── zcanadapter.h/.cpp    # ZCAN 适配器 (VCI API, 静态链接)
+│   ├── socketcanadapter.h/.cpp # SocketCAN 适配器 (Linux, QSocketNotifier)
+│   ├── mockcanadapter.h/.cpp # MockCAN 虚拟适配器 (Debug 模式, 随机报文)
 │   └── CandleApiDriver/      # candle API 驱动
 ├── third_party/              # 第三方 SDK (Git LFS)
 │   ├── pcan/PCANBasic.dll
 │   ├── zcanfd/
 │   └── zcan/
 ├── ui/
-│   └── cansessionwidget.h/.cpp/.ui # CAN 会话面板
+│   ├── welcomewidget.h/.cpp/.ui        # 欢迎页
+│   ├── sessionconfigdialog.h/.cpp/.ui   # 新建会话对话框
+│   └── cansessionwidget.h/.cpp/.ui     # CAN 会话面板 (收发/表格/软过滤/CSV导出)
 ├── libs/
 │   └── Qt-Advanced-Docking-System/  # (需自行克隆)
 └── pic/                      # 截图
