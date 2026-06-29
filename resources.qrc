@@ -4,4 +4,8 @@
         <file>style.qss</file>
         <file>resources/checkmark.svg</file>
     </qresource>
+    <qresource prefix="/translations">
+        <file>QCanAnalyzer_zh_CN.qm</file>
+        <file>QCanAnalyzer_en_US.qm</file>
+    </qresource>
 </RCC>

@@ -21,7 +21,8 @@ public:
     bool isOpen() const override;
     bool sendMessage(const CanMessage &msg) override;
     bool isAlive() const override;
-    QString adapterName() const override { return "MockCAN (虚拟)"; }
+    QString adapterName() const override { return tr("MockCAN (虚拟)"); }
+    QList<int> availableSendChannels() const override;
 
     /// 设置随机接收报文的频率（毫秒），0=不自动接收
     void setAutoRxInterval(int ms);
@@ -34,7 +35,7 @@ private slots:
 
 private:
     /// 生成一条随机 CAN 报文
-    CanMessage generateRandomMessage();
+    CanMessage generateRandomMessage(int channel);
 
     bool      m_opened = false;
     int       m_channel = 0;

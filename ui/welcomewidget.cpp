@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QScreen>
 #include <QPixmap>
+#include <QEvent>
 
 WelcomeWidget::WelcomeWidget(QWidget *parent)
     : QWidget(parent)
@@ -97,6 +98,14 @@ WelcomeWidget::WelcomeWidget(QWidget *parent)
 WelcomeWidget::~WelcomeWidget()
 {
     delete ui;
+}
+
+void WelcomeWidget::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        ui->retranslateUi(this);
+    }
+    QWidget::changeEvent(event);
 }
 
 void WelcomeWidget::paintEvent(QPaintEvent *)

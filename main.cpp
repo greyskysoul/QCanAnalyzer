@@ -4,6 +4,7 @@
 #include <QStyleFactory>
 #include <QIcon>
 #include <QFile>
+#include <QLocale>
 
 int main(int argc, char *argv[])
 {
@@ -29,6 +30,21 @@ int main(int argc, char *argv[])
     font.setHintingPreference(QFont::PreferFullHinting);
     a.setFont(font);
 
+    // ─── 检测初始语言 ───
+    // 优先级: 命令行 --lang 参数 > 系统语言 > 默认 zh_CN
+    // 用法: QCanAnalyzer.exe --lang en_US  或  QCanAnalyzer.exe --lang zh_CN
+    QString lang;
+    QStringList args = a.arguments();
+    int langIdx = args.indexOf("--lang");
+    if (langIdx >= 0 && langIdx + 1 < args.size()) {
+        lang = args[langIdx + 1];
+        args.removeAt(langIdx);     // 移除 --lang
+        args.removeAt(langIdx);     // 移除参数值
+    }
+    if (lang.isEmpty()) {
+        lang = QLocale::system().name();  // 如 "zh_CN", "en_US"
+    }
+
     // 加载全局样式表
     QFile styleFile(":/style.qss");
     if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
@@ -36,7 +52,7 @@ int main(int argc, char *argv[])
         styleFile.close();
     }
 
-    MainWindow w;
+    MainWindow w(lang);
     w.show();
     return a.exec();
 }

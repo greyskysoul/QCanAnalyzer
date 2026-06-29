@@ -3,6 +3,7 @@
 
 #include "can/caninterface.h"
 #include <QDialog>
+#include <QEvent>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class SessionConfigDialog; }
@@ -29,6 +30,9 @@ public:
 private slots:
     void onCanFdToggled(bool checked);
     void onAdapterChanged();
+
+protected:
+    void changeEvent(QEvent *event) override;
 
 private:
     void scanDevices();

@@ -178,7 +178,8 @@ FORMS += \
     ui/cansessionwidget.ui
 
 TRANSLATIONS += \
-    QCanAnalyzer_zh_CN.ts
+    QCanAnalyzer_zh_CN.ts \
+    QCanAnalyzer_en_US.ts
 
 # ═══════════════════════════════════════════════════════════════
 # 部署规则

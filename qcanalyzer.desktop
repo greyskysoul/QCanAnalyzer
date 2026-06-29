@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=QCanAnalyzer
+Name[zh_CN]=QCanAnalyzer
+Comment=CAN/CAN-FD bus debugging & analysis tool
+Comment[zh_CN]=CAN/CAN-FD 总线调试分析工具
+GenericName=CAN Bus Analyzer
+GenericName[zh_CN]=CAN 总线分析器
+Exec=QCanAnalyzer
+Icon=icon
+Terminal=false
+Categories=Development;Debugger;
+Keywords=CAN;CAN-FD;bus;debug;analyzer;PCAN;SocketCAN;
+Keywords[zh_CN]=CAN;CAN-FD;总线;调试;分析;PCAN;SocketCAN;

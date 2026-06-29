@@ -2,6 +2,7 @@
 #include <QDebug>
 #include <QTimer>
 #include <QCoreApplication>
+#include <QVector>
 
 // ─── 构造 / 析构 ──────────────────────────────────────────────
 
@@ -83,73 +84,91 @@ void PcanAdapter::unloadLibrary()
 QList<CanDeviceInfo> PcanAdapter::scanDevices()
 {
     QList<CanDeviceInfo> devices;
-    if (!m_loaded) return devices;
+    if (!m_loaded || !m_GetValue) return devices;
 
-    // ═══ 方法1: 通过 CAN_GetValue 查询已连接 (attached) 通道 ═══
-    // PCAN_ATTACHED_CHANNELS 返回一个 uint32_t 位掩码
-    if (m_GetValue) {
-        uint32_t attachedMask = 0;
-        uint32_t res = m_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS,
-                                  &attachedMask, sizeof(attachedMask));
-        if (res == PCAN_ERROR_OK && attachedMask != 0) {
-            // 所有标准通道
-            static const int channels[] = {
-                PCAN_USBBUS1, PCAN_USBBUS2, PCAN_USBBUS3, PCAN_USBBUS4,
-                PCAN_USBBUS5, PCAN_USBBUS6, PCAN_USBBUS7, PCAN_USBBUS8,
-                PCAN_USBBUS9, PCAN_USBBUS10,PCAN_USBBUS11,PCAN_USBBUS12,
-                PCAN_USBBUS13,PCAN_USBBUS14,PCAN_USBBUS15,PCAN_USBBUS16,
-                PCAN_PCIBUS1, PCAN_PCIBUS2, PCAN_PCIBUS3, PCAN_PCIBUS4,
-                PCAN_PCIBUS5, PCAN_PCIBUS6, PCAN_PCIBUS7, PCAN_PCIBUS8,
-            };
+    // ═══ 方法1: 尝试新版 PCANBasic 4.x API (TPCANChannelInformation 数组) ═══
+    // PCAN_ATTACHED_CHANNELS_COUNT → PCAN_ATTACHED_CHANNELS
+    uint32_t channelCount = 0;
+    uint32_t res = m_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS_COUNT,
+                              &channelCount, sizeof(channelCount));
+    if (res == PCAN_ERROR_OK && channelCount > 0 && channelCount <= 64) {
+        // PCANBasic 4.x: 返回 TPCANChannelInformation 数组
+        QVector<TPCANChannelInformation> infoBuf(channelCount);
+        res = m_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS,
+                         infoBuf.data(), channelCount * sizeof(TPCANChannelInformation));
+        if (res == PCAN_ERROR_OK) {
+            for (uint32_t i = 0; i < channelCount; ++i) {
+                const TPCANChannelInformation &ci = infoBuf[i];
+                if (ci.channel_condition == PCAN_CHANNEL_UNAVAILABLE)
+                    continue;
 
-            for (int ch : channels) {
-                uint16_t handle = (uint16_t)ch;
-                // 位掩码中对应位为1表示已连接
-                if (attachedMask & (1u << (handle & 0x0F))) {
-                    // 检查通道条件
-                    uint32_t cond = 0;
-                    m_GetValue(handle, PCAN_CHANNEL_CONDITION, &cond, sizeof(cond));
+                CanDeviceInfo info;
+                info.channel = ci.channel_handle;
+                info.name = QString::fromLatin1(ci.device_name, MAX_LENGTH_HARDWARE_NAME).trimmed();
+                if (info.name.isEmpty())
+                    info.name = channelName(ci.channel_handle);
 
-                    CanDeviceInfo info;
-                    info.channel = ch;
-                    info.name = channelName(ch);
-                    QString condStr;
-                    if (cond == PCAN_CHANNEL_AVAILABLE)
-                        condStr = "可用";
-                    else if (cond == PCAN_CHANNEL_OCCUPIED)
-                        condStr = "被占用";
-                    info.description = QString("%1 [%2]").arg(info.name).arg(condStr);
-                    devices.append(info);
-                }
+                QString condStr;
+                if (ci.channel_condition == PCAN_CHANNEL_AVAILABLE)
+                    condStr = QStringLiteral("可用");
+                else if (ci.channel_condition == PCAN_CHANNEL_PCANVIEW)
+                    condStr = QStringLiteral("可用(PCAN-View)");
+                else if (ci.channel_condition == PCAN_CHANNEL_OCCUPIED)
+                    condStr = QStringLiteral("被占用");
+                info.description = QStringLiteral("%1 [%2]").arg(info.name).arg(condStr);
+                devices.append(info);
             }
             return devices;
         }
     }
 
-    // ═══ 方法2: 遍历通道尝试初始化 ═══
-    // 有些驱动版本/旧版不支持 PCAN_ATTACHED_CHANNELS
-    static const int fallbackChannels[] = {
+    // ═══ 方法2: 逐通道查询 PCAN_CHANNEL_CONDITION（兼容所有版本） ═══
+    static const int allChannels[] = {
         PCAN_USBBUS1, PCAN_USBBUS2, PCAN_USBBUS3, PCAN_USBBUS4,
         PCAN_USBBUS5, PCAN_USBBUS6, PCAN_USBBUS7, PCAN_USBBUS8,
         PCAN_USBBUS9, PCAN_USBBUS10,PCAN_USBBUS11,PCAN_USBBUS12,
         PCAN_USBBUS13,PCAN_USBBUS14,PCAN_USBBUS15,PCAN_USBBUS16,
         PCAN_PCIBUS1, PCAN_PCIBUS2, PCAN_PCIBUS3, PCAN_PCIBUS4,
         PCAN_PCIBUS5, PCAN_PCIBUS6, PCAN_PCIBUS7, PCAN_PCIBUS8,
+        PCAN_PCIBUS9, PCAN_PCIBUS10,PCAN_PCIBUS11,PCAN_PCIBUS12,
+        PCAN_PCIBUS13,PCAN_PCIBUS14,PCAN_PCIBUS15,PCAN_PCIBUS16,
     };
 
-    for (int ch : fallbackChannels) {
+    for (int ch : allChannels) {
         uint16_t handle = (uint16_t)ch;
-        // 尝试初始化来检测硬件
-        uint32_t res = m_Initialize(handle, 0x001C, 0, 0, 0);
+        uint32_t cond = PCAN_CHANNEL_UNAVAILABLE;
+        bool detected = false;
+        QString condStr;
+
+        // 先尝试 PCAN_CHANNEL_CONDITION (无需初始化)
+        res = m_GetValue(handle, PCAN_CHANNEL_CONDITION, &cond, sizeof(cond));
         if (res == PCAN_ERROR_OK) {
+            if (cond == PCAN_CHANNEL_AVAILABLE || cond == PCAN_CHANNEL_PCANVIEW) {
+                detected = true;
+                condStr = QStringLiteral("可用");
+            } else if (cond == PCAN_CHANNEL_OCCUPIED) {
+                detected = true;
+                condStr = QStringLiteral("被占用");
+            }
+        }
+
+        // 回退: 尝试 CAN_Initialize 检测硬件
+        if (!detected) {
+            res = m_Initialize(handle, PCAN_BAUD_500K, 0, 0, 0);
+            if (res == PCAN_ERROR_OK) {
+                detected = true;
+                condStr = QStringLiteral("可用");
+                m_Uninitialize(handle);
+            }
+        }
+
+        if (detected) {
             CanDeviceInfo info;
             info.channel = ch;
             info.name = channelName(ch);
-            info.description = QString("%1 [可用]").arg(info.name);
+            info.description = QStringLiteral("%1 [%2]").arg(info.name).arg(condStr);
             devices.append(info);
-            m_Uninitialize(handle); // 立即释放
         }
-        // PCAN_ERROR_ILLHW 和 PCAN_ERROR_NODRIVER 表示无硬件，跳过
     }
 
     return devices;
@@ -257,6 +276,14 @@ bool PcanAdapter::isAlive() const
 
     // 总线错误不影响存活判断
     return true;
+}
+
+QList<int> PcanAdapter::availableSendChannels() const
+{
+    QList<int> channels;
+    if (m_opened)
+        channels.append(m_channel & 0x0F);
+    return channels;
 }
 
 // ─── 发送 ─────────────────────────────────────────────────────

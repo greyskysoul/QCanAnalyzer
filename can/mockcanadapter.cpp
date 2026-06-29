@@ -29,8 +29,8 @@ QList<CanDeviceInfo> MockCanAdapter::scanDevices()
     // 模拟 2 个虚拟通道
     for (int i = 0; i < 2; ++i) {
         CanDeviceInfo info;
-        info.name        = QString("MockCAN CH%1").arg(i);
-        info.description = QString("虚拟 CAN 通道 %1 (仅 Debug)").arg(i);
+        info.name        = tr("MockCAN #%1").arg(i);
+        info.description = tr("虚拟 CAN 通道 %1 (仅 Debug)").arg(i);
         info.channel     = i;
         info.adapterType = static_cast<int>(CanAdapterType::MockCan);
         devices.append(info);
@@ -113,18 +113,22 @@ void MockCanAdapter::onRxTick()
     if (!m_opened)
         return;
 
-    CanMessage msg = generateRandomMessage();
-    emit messageReceived(msg);
+    // 同时在两个通道上生成随机数据
+    CanMessage msg0 = generateRandomMessage(0);
+    emit messageReceived(msg0);
+
+    CanMessage msg1 = generateRandomMessage(1);
+    emit messageReceived(msg1);
 }
 
-CanMessage MockCanAdapter::generateRandomMessage()
+CanMessage MockCanAdapter::generateRandomMessage(int channel)
 {
     auto *rng = QRandomGenerator::global();
 
     CanMessage msg;
     msg.timestamp = QDateTime::currentDateTime();
     msg.direction = CanDirection::Rx;
-    msg.channel   = m_channel;
+    msg.channel   = channel;
     msg.isFd      = false;
 
     // 随机 ID (11-bit 或 29-bit)
@@ -157,4 +161,13 @@ CanMessage MockCanAdapter::generateRandomMessage()
 
     m_msgCounter++;
     return msg;
+}
+
+QList<int> MockCanAdapter::availableSendChannels() const
+{
+    // 两个通道都可用于发送
+    QList<int> channels;
+    if (m_opened)
+        channels << 0 << 1;
+    return channels;
 }

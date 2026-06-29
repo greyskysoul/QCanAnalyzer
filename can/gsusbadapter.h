@@ -22,6 +22,7 @@ public:
     bool sendMessage(const CanMessage &msg) override;
     bool isAlive() const override;
     QString adapterName() const override { return "gs_usb"; }
+    QList<int> availableSendChannels() const override;
 
     static QString channelName(int channel);
 

@@ -435,3 +435,11 @@ QString GsUsbAdapter::channelName(int channel)
     return QString("candleLight #%1").arg(dev);
 }
 
+QList<int> GsUsbAdapter::availableSendChannels() const
+{
+    QList<int> channels;
+    if (m_opened)
+        channels.append(m_channelIndex);
+    return channels;
+}
+

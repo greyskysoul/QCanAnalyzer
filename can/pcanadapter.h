@@ -31,6 +31,7 @@ public:
     bool sendMessage(const CanMessage &msg) override;
     bool isAlive() const override;
     QString adapterName() const override { return "PCAN"; }
+    QList<int> availableSendChannels() const override;
 
     /// 设置读取超时 (ms)
     void setReadTimeout(int ms);

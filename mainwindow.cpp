@@ -13,18 +13,27 @@
 #include <QMenuBar>
 #include <QStatusBar>
 #include <QAction>
+#include <QActionGroup>
 #include <QMessageBox>
 #include <QVBoxLayout>
 #include <QStackedWidget>
 #include <QApplication>
 #include <QPixmap>
 #include <QSplitter>
+#include <QTranslator>
+#include <QLibraryInfo>
+#include <QDir>
+#include <QTimer>
 
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(const QString &initialLang, QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , m_currentLang(initialLang)
 {
     ui->setupUi(this);
+
+    // ─── 加载翻译 (必须在 setupMenuBar 之前) ───
+    initLanguage(initialLang);
 
     // ─── StackedWidget: 页0=欢迎页, 页1=Dock区域 ───
     m_stack = new QStackedWidget();
@@ -123,28 +132,28 @@ void MainWindow::hideWelcomePage()
 void MainWindow::setupMenuBar()
 {
     // ── 文件 ──
-    QMenu *fileMenu = menuBar()->addMenu("文件(&F)");
+    QMenu *fileMenu = menuBar()->addMenu(tr("文件(&F)"));
 
-    QAction *newSessionAct = new QAction("新建会话(&N)", this);
+    QAction *newSessionAct = new QAction(tr("新建会话(&N)"), this);
     newSessionAct->setShortcut(QKeySequence("Ctrl+N"));
     connect(newSessionAct, &QAction::triggered, this, &MainWindow::onNewSession);
     fileMenu->addAction(newSessionAct);
 
-    QAction *closeAllAct = new QAction("关闭所有会话", this);
+    QAction *closeAllAct = new QAction(tr("关闭所有会话"), this);
     connect(closeAllAct, &QAction::triggered, this, &MainWindow::onCloseAllSessions);
     fileMenu->addAction(closeAllAct);
 
     fileMenu->addSeparator();
 
-    QAction *exitAct = new QAction("退出(&X)", this);
+    QAction *exitAct = new QAction(tr("退出(&X)"), this);
     exitAct->setShortcut(QKeySequence("Alt+F4"));
     connect(exitAct, &QAction::triggered, this, &QMainWindow::close);
     fileMenu->addAction(exitAct);
 
     // ── 窗口 ──
-    QMenu *windowMenu = menuBar()->addMenu("窗口(&W)");
+    QMenu *windowMenu = menuBar()->addMenu(tr("窗口(&W)"));
 
-    QAction *tileHAct = new QAction("水平平铺", this);
+    QAction *tileHAct = new QAction(tr("水平平铺"), this);
     connect(tileHAct, &QAction::triggered, this, [this]() {
         QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
         // 需要至少 2 个 dock widget 才能拆分
@@ -181,7 +190,7 @@ void MainWindow::setupMenuBar()
     });
     windowMenu->addAction(tileHAct);
 
-    QAction *tileVAct = new QAction("垂直平铺", this);
+    QAction *tileVAct = new QAction(tr("垂直平铺"), this);
     connect(tileVAct, &QAction::triggered, this, [this]() {
         QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
         int totalDocks = 0;
@@ -216,7 +225,7 @@ void MainWindow::setupMenuBar()
 
     windowMenu->addSeparator();
 
-    QAction *unsplitAct = new QAction("取消拆分", this);
+    QAction *unsplitAct = new QAction(tr("取消拆分"), this);
     connect(unsplitAct, &QAction::triggered, this, [this]() {
         QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
         if (areas.size() < 2) return;
@@ -231,25 +240,57 @@ void MainWindow::setupMenuBar()
     windowMenu->addAction(unsplitAct);
 
     // ── 帮助 ──
-    QMenu *helpMenu = menuBar()->addMenu("帮助(&H)");
-    QAction *aboutAct = new QAction("关于(&A)", this);
+    QMenu *helpMenu = menuBar()->addMenu(tr("帮助(&H)"));
+    QAction *aboutAct = new QAction(tr("关于(&A)"), this);
     connect(aboutAct, &QAction::triggered, this, [this]() {
         QMessageBox about(this);
-        about.setWindowTitle("关于 QCanAnalyzer");
+        about.setWindowTitle(tr("关于 QCanAnalyzer"));
         about.setIconPixmap(QPixmap(":/icon.png").scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        about.setText("<h3>QCanAnalyzer v1.0</h3>"
+        about.setText(tr("<h3>QCanAnalyzer v1.0</h3>"
             "<p>CAN 总线调试分析工具</p>"
             "<p>PCAN &middot; gs_usb (candleLight) &middot; ZCANFD &middot; ZCAN &middot; SocketCAN</p>"
             "<p>CAN-FD 支持 &middot; 多通道识别 &middot; 帧间隔发送 &middot; 多会话停靠</p>"
-            "<p style='color:gray;'>AI 生成项目 — GitHub Copilot (DeepSeek V4 Pro)</p>");
+            "<p style='color:gray;'>AI 生成项目 — GitHub Copilot (DeepSeek V4 Pro)</p>"));
         about.exec();
     });
     helpMenu->addAction(aboutAct);
+
+    // ── 语言 ──
+    QMenu *langMenu = menuBar()->addMenu(tr("语言(&L)"));
+
+    if (m_langGroup) {
+        delete m_langGroup;
+        m_langGroup = nullptr;
+    }
+    m_langGroup = new QActionGroup(this);
+    m_langGroup->setExclusive(true);
+
+    QAction *zhAct = new QAction(tr("中文"), m_langGroup);
+    zhAct->setObjectName("langZhAct");
+    zhAct->setCheckable(true);
+    zhAct->setData("zh_CN");
+
+    QAction *enAct = new QAction(tr("English"), m_langGroup);
+    enAct->setObjectName("langEnAct");
+    enAct->setCheckable(true);
+    enAct->setData("en_US");
+
+    langMenu->addAction(zhAct);
+    langMenu->addAction(enAct);
+
+    // 直接设置当前语言的勾选状态
+    zhAct->setChecked(m_currentLang == "zh_CN");
+    enAct->setChecked(m_currentLang == "en_US");
+
+    connect(m_langGroup, &QActionGroup::triggered, this, [this](QAction *act) {
+        switchLanguage(act->data().toString());
+    });
 }
 
 void MainWindow::setupStatusBar()
 {
-    statusBar()->showMessage("就绪  —  按 Ctrl+N 新建 CAN 会话");
+    m_statusReadyMsg = tr("就绪  —  按 Ctrl+N 新建 CAN 会话");
+    statusBar()->showMessage(m_statusReadyMsg);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -274,7 +315,7 @@ void MainWindow::onNewSession()
 
     m_canManager->createSession(channel, baud, isCanFd, adapterType, deviceName, dataBaud);
     statusBar()->showMessage(
-        QString("已创建会话 — 当前共 %1 个会话").arg(m_canManager->sessionCount()), 3000);
+        tr("已创建会话 — 当前共 %1 个会话").arg(m_canManager->sessionCount()), 3000);
 }
 
 void MainWindow::onCloseAllSessions()
@@ -282,12 +323,79 @@ void MainWindow::onCloseAllSessions()
     QList<CanSessionWidget*> sessions = m_canManager->sessions();
     for (auto *s : sessions)
         m_canManager->closeSession(s->sessionId());
-    statusBar()->showMessage("所有会话已关闭", 3000);
+    statusBar()->showMessage(tr("所有会话已关闭"), 3000);
 }
 
 void MainWindow::onAllSessionsClosed()
 {
     showWelcomePage();
-    statusBar()->showMessage("就绪  —  按 Ctrl+N 新建 CAN 会话");
+    statusBar()->showMessage(m_statusReadyMsg);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// 语言切换
+// ═══════════════════════════════════════════════════════════════
+
+void MainWindow::initLanguage(const QString &lang)
+{
+    // Qt 基础翻译
+    m_qtTranslator = new QTranslator(this);
+    QString qtTrPath = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
+    if (m_qtTranslator->load("qt_" + lang, qtTrPath)) {
+        qApp->installTranslator(m_qtTranslator);
+    }
+
+    // 应用翻译 (外部文件优先于内置资源)
+    m_appTranslator = new QTranslator(this);
+    QString qmFile = "QCanAnalyzer_" + lang;
+    if (m_appTranslator->load(qmFile, QDir(QApplication::applicationDirPath()).absolutePath())
+        || m_appTranslator->load(qmFile, ":/translations")) {
+        qApp->installTranslator(m_appTranslator);
+    }
+}
+
+void MainWindow::switchLanguage(const QString &lang)
+{
+    if (lang == m_currentLang) return;
+    m_currentLang = lang;
+
+    // 将所有操作延迟到下一事件循环：避免在 QActionGroup::triggered
+    // 信号处理期间修改 UI，彻底消除按压时双圆点和菜单闪烁
+    QTimer::singleShot(0, this, [this, lang]() {
+        // 先关闭弹出菜单
+        for (QAction *act : menuBar()->actions()) {
+            if (QMenu *m = act->menu())
+                m->hide();
+        }
+
+        // 移除旧的翻译器
+        if (m_appTranslator) {
+            qApp->removeTranslator(m_appTranslator);
+            delete m_appTranslator;
+            m_appTranslator = nullptr;
+        }
+        if (m_qtTranslator) {
+            qApp->removeTranslator(m_qtTranslator);
+            delete m_qtTranslator;
+            m_qtTranslator = nullptr;
+        }
+
+        // 加载新的翻译器
+        initLanguage(lang);
+
+        // 重建菜单栏
+        menuBar()->clear();
+        setupMenuBar();
+
+        // 更新状态栏文本
+        m_statusReadyMsg = tr("就绪  —  按 Ctrl+N 新建 CAN 会话");
+        if (!m_canManager->hasSessions())
+            statusBar()->showMessage(m_statusReadyMsg);
+
+        // 更新窗口标题
+        setWindowTitle(tr("QCanAnalyzer - CAN Bus Debug Tool"));
+    });
+}
+
+
 

@@ -95,7 +95,11 @@ private slots:
 private:
     void setupUi();
     void linkSignals(CanInterface *iface);
+    void retranslateDynamicUi();
     void addMessageToTable(const CanMessage &msg);
+
+protected:
+    void changeEvent(QEvent *event) override;
     void updateStats();
     void updateChannelCheckboxes();
     void refreshSendChannelCombo();

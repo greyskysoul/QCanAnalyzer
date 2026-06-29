@@ -1,5 +1,6 @@
 #include "cansessionwidget.h"
 #include "ui_cansessionwidget.h"
+#include <QEvent>
 #ifndef Q_OS_LINUX
 #include "can/pcanadapter.h"
 #include "can/gsusbadapter.h"
@@ -72,7 +73,7 @@ void CanSessionWidget::linkSignals(CanInterface *iface)
         QString shortErr = err;
         if (shortErr.length() > 50)
             shortErr = shortErr.left(47) + "...";
-        ui->statusLabel->setText("⚠ " + shortErr);
+        ui->statusLabel->setText(tr("⚠ %1").arg(shortErr));
         ui->statusLabel->setToolTip(err);
         ui->statusLabel->setStyleSheet("color:orange; font-weight:bold;");
     });
@@ -138,7 +139,9 @@ void CanSessionWidget::setupUi()
 
     // ─── 发送面板 ───
     ui->sendIdEdit->setMaximumWidth(qRound(100 * scale));
-    ui->sendTypeCombo->addItems({"标准数据帧", "扩展数据帧", "远程帧"});
+    ui->sendTypeCombo->addItem(tr("标准数据帧"));
+    ui->sendTypeCombo->addItem(tr("扩展数据帧"));
+    ui->sendTypeCombo->addItem(tr("远程帧"));
     ui->sendDlcSpin->setRange(0, 8);
     ui->sendDlcSpin->setValue(8);
     ui->sendDlcSpin->setFixedWidth(qRound(55 * scale));
@@ -176,8 +179,8 @@ void CanSessionWidget::setupUi()
     // 帧间隔 SpinBox：0 = 最快速，>0 = 每帧间隔 N ms
     ui->sendPeriodSpin->setRange(0, 10000);
     ui->sendPeriodSpin->setValue(0);
-    ui->sendPeriodSpin->setSpecialValueText("最快");
-    ui->sendPeriodSpin->setSuffix(" ms");
+    ui->sendPeriodSpin->setSpecialValueText(tr("最快"));
+    ui->sendPeriodSpin->setSuffix(tr(" ms"));
 
     // 帧数 SpinBox
     ui->sendFrameCountSpin->setMinimum(1);
@@ -264,7 +267,7 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
 
 #ifdef Q_OS_LINUX
     if (adapterType == static_cast<int>(CanAdapterType::SocketCAN)) {
-        ui->deviceLabel->setText("SocketCAN (请用 ip link 命令设置波特率)");
+        ui->deviceLabel->setText(tr("SocketCAN (请用 ip link 命令设置波特率)"));
     } else {
         ui->deviceLabel->setText(newCan->adapterName());
     }
@@ -321,7 +324,7 @@ void CanSessionWidget::refreshSendChannelCombo()
     int currentCh = m_can->currentSendChannel();
 
     for (int ch : channels) {
-        ui->sendChanCombo->addItem(QString("CH%1").arg(ch), ch);
+        ui->sendChanCombo->addItem(tr("CH%1").arg(ch), ch);
         if (ch == currentCh)
             ui->sendChanCombo->setCurrentIndex(ui->sendChanCombo->count() - 1);
     }
@@ -353,7 +356,7 @@ void CanSessionWidget::onStatusCheck()
         m_can->close();
         updateUiState(false);
 
-        ui->statusLabel->setText("⚠ 设备已断开");
+        ui->statusLabel->setText(tr("⚠ 设备已断开"));
         ui->statusLabel->setStyleSheet("color:red; font-weight:bold;");
         emit deviceDisconnected(m_sessionId);
     }
@@ -375,20 +378,20 @@ void CanSessionWidget::updateUiState(bool connected)
         "QPushButton:hover { background-color: #d32f2f; }";
 
     if (connected) {
-        ui->statusLabel->setText("● 已连接");
+        ui->statusLabel->setText(tr("● 已连接"));
         ui->statusLabel->setToolTip("");
         ui->statusLabel->setStyleSheet("color:green; font-weight:bold;");
-        ui->connectBtn->setText("断开");
+        ui->connectBtn->setText(tr("断开"));
         ui->connectBtn->setStyleSheet(redBtn);
         ui->baudCombo->setEnabled(false);
         ui->dataBaudCombo->setEnabled(false);
         // 通道选择器在连接后可切换
         ui->sendChanCombo->setEnabled(m_can && m_can->availableSendChannels().size() > 1);
     } else {
-        ui->statusLabel->setText("未连接");
+        ui->statusLabel->setText(tr("未连接"));
         ui->statusLabel->setToolTip("");
         ui->statusLabel->setStyleSheet("color:gray; font-weight:bold;");
-        ui->connectBtn->setText("连接");
+        ui->connectBtn->setText(tr("连接"));
         ui->connectBtn->setStyleSheet(greenBtn);
         ui->baudCombo->setEnabled(true);
         ui->dataBaudCombo->setEnabled(true);
@@ -409,13 +412,14 @@ void CanSessionWidget::updateChannelCheckboxes()
 
     QList<int> channels = m_can->availableSendChannels();
     for (int ch : channels) {
-        auto *chk = new QCheckBox(QString("CH%1").arg(ch));
+        auto *chk = new QCheckBox(tr("CH%1").arg(ch));
         chk->setChecked(true);
-        chk->setToolTip(QString("通道 %1").arg(ch));
+        chk->setToolTip(tr("通道 %1").arg(ch));
         chk->setProperty("canChannel", ch);
         m_channelChks.append(chk);
         ui->channelChkLayout->addWidget(chk);
     }
+    ui->channelChkLayout->setAlignment(Qt::AlignLeft);
     ui->channelChkLayout->addStretch();
 }
 
@@ -551,7 +555,7 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         const QString redBtn = btnStyle +
             "QPushButton { background-color: #f44336; color: white; }"
             "QPushButton:hover { background-color: #d32f2f; }";
-        ui->sendBtn->setText("停止");
+        ui->sendBtn->setText(tr("停止"));
         ui->sendBtn->setStyleSheet(redBtn);
         ui->sendBtn->setFixedWidth(qRound(80 * scale));
         // 发送期间禁用参数编辑
@@ -566,7 +570,7 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         const QString blueBtn = btnStyle +
             "QPushButton { background-color: #2196F3; color: white; }"
             "QPushButton:hover { background-color: #0b7dda; }";
-        ui->sendBtn->setText("发送");
+        ui->sendBtn->setText(tr("发送"));
         ui->sendBtn->setStyleSheet(blueBtn);
         ui->sendBtn->setFixedWidth(qRound(80 * scale));
         // 恢复参数编辑
@@ -580,6 +584,45 @@ void CanSessionWidget::updateSendButtonState(bool sending)
         bool multiCh = m_can && m_can->availableSendChannels().size() > 1;
         ui->sendChanCombo->setEnabled(multiCh);
     }
+}
+
+void CanSessionWidget::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        ui->retranslateUi(this);
+        retranslateDynamicUi();
+    }
+    QWidget::changeEvent(event);
+}
+
+void CanSessionWidget::retranslateDynamicUi()
+{
+    // 重新填充帧类型下拉框
+    int typeIdx = ui->sendTypeCombo->currentIndex();
+    ui->sendTypeCombo->clear();
+    ui->sendTypeCombo->addItem(tr("标准数据帧"));
+    ui->sendTypeCombo->addItem(tr("扩展数据帧"));
+    ui->sendTypeCombo->addItem(tr("远程帧"));
+    ui->sendTypeCombo->setCurrentIndex(typeIdx);
+
+    // 帧间隔 SpinBox
+    ui->sendPeriodSpin->setSpecialValueText(tr("最快"));
+    ui->sendPeriodSpin->setSuffix(tr(" ms"));
+
+    // 恢复设备名 (retranslateUi 会重置为 .ui 中的 "—")
+#ifdef Q_OS_LINUX
+    if (m_adapterType == static_cast<int>(CanAdapterType::SocketCAN))
+        ui->deviceLabel->setText(tr("SocketCAN (请用 ip link 命令设置波特率)"));
+    else if (m_can)
+        ui->deviceLabel->setText(m_can->adapterName());
+#else
+    if (m_can)
+        ui->deviceLabel->setText(m_can->adapterName());
+#endif
+
+    // 刷新动态状态文本
+    updateUiState(m_can && m_can->isOpen());
+    updateSendButtonState(m_sending);
 }
 
 void CanSessionWidget::onClearClicked()
@@ -597,7 +640,7 @@ void CanSessionWidget::onSaveClicked()
     QString defaultName = QString("can_log_%1.csv")
         .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
     QString filePath = QFileDialog::getSaveFileName(
-        this, "保存 CAN 报文", defaultName,
+        this, tr("保存 CAN 报文"), defaultName,
         "CSV 文件 (*.csv);;所有文件 (*)");
 
     if (filePath.isEmpty()) return;

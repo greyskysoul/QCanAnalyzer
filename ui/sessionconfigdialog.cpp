@@ -15,6 +15,8 @@
 
 #include <QPushButton>
 #include <QMessageBox>
+#include <QEvent>
+#include <QFontMetrics>
 
 SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     : QDialog(parent)
@@ -37,18 +39,20 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     ui->adapterCombo->addItem("ZCAN (USBCAN)", static_cast<int>(CanAdapterType::ZCAN));
 #endif
 #ifdef QT_DEBUG
-    ui->adapterCombo->addItem("MockCAN (虚拟调试)", static_cast<int>(CanAdapterType::MockCan));
+    ui->adapterCombo->addItem(tr("MockCAN (虚拟调试)"), static_cast<int>(CanAdapterType::MockCan));
 #endif
 
     // 切换适配器时只更新提示，不自动扫描（避免卡顿）
     connect(ui->adapterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SessionConfigDialog::onAdapterChanged);
 
-    // 刷新按钮
+    // 刷新按钮 — 动态宽度适配中英文
     ui->refreshBtn->setStyleSheet(
         "QPushButton { background-color: #607d8b; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 8px; }"
         "QPushButton:hover { background-color: #455a64; }");
+    ui->refreshBtn->setMinimumWidth(0);
+    ui->refreshBtn->setMaximumWidth(16777215);
     connect(ui->refreshBtn, &QPushButton::clicked, this, &SessionConfigDialog::scanDevices);
 
     // 波特率列表
@@ -67,13 +71,13 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     ui->statusLabel->setStyleSheet("color: #7f8c8d; font-size: 12px;");
 
     // ── 按钮 ──
-    ui->buttonBox->button(QDialogButtonBox::Ok)->setText("创建会话");
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("创建会话"));
     ui->buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(
         "QPushButton { background-color: #3498db; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 10px; }"
         "QPushButton:hover { background-color: #2980b9; }"
         "QPushButton:disabled { background-color: #bdc3c7; color: #95a5a6; }");
-    ui->buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
+    ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("取消"));
     ui->buttonBox->button(QDialogButtonBox::Cancel)->setStyleSheet(
         "QPushButton { background-color: #607d8b; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 10px; }"
@@ -81,7 +85,7 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
 
     connect(ui->buttonBox, &QDialogButtonBox::accepted, this, [this]() {
         if (ui->deviceCombo->currentData().toInt() < 0) {
-            QMessageBox::warning(this, "提示", "请选择有效的 CAN 设备");
+            QMessageBox::warning(this, tr("提示"), tr("请选择有效的 CAN 设备"));
             return;
         }
         accept();
@@ -100,8 +104,8 @@ SessionConfigDialog::~SessionConfigDialog()
 void SessionConfigDialog::onAdapterChanged()
 {
     ui->deviceCombo->clear();
-    ui->deviceCombo->addItem("点击「刷新」扫描设备", -1);
-    ui->statusLabel->setText("请点击刷新按钮扫描设备");
+    ui->deviceCombo->addItem(tr("点击「刷新」扫描设备"), -1);
+    ui->statusLabel->setText(tr("请点击刷新按钮扫描设备"));
     if (auto *btn = ui->buttonBox->button(QDialogButtonBox::Ok))
         btn->setEnabled(false);
 }
@@ -156,19 +160,18 @@ void SessionConfigDialog::scanDevices()
     }
 
     if (devices.isEmpty()) {
-        ui->deviceCombo->addItem("未检测到设备", -1);
+        ui->deviceCombo->addItem(tr("未检测到设备"), -1);
 
 #ifdef Q_OS_LINUX
         if (adapterType == static_cast<int>(CanAdapterType::SocketCAN))
-            ui->statusLabel->setText("⚠ 请使用 ip link 命令配置 CAN 接口波特率\n"
-                                   "   例: sudo ip link set can0 type can bitrate 500000");
+            ui->statusLabel->setText(tr("⚠ 请使用 ip link 命令配置 CAN 接口波特率\n"
+                                   "   例: sudo ip link set can0 type can bitrate 500000"));
         else
 #endif
-            ui->statusLabel->setText("⚠ 未检测到设备，请检查连接和驱动");
+            ui->statusLabel->setText(tr("⚠ 未检测到设备，请检查连接和驱动"));
         if (adapterType == static_cast<int>(CanAdapterType::ZCAN)
             || adapterType == static_cast<int>(CanAdapterType::ZCANFD)) {
-            ui->statusLabel->setToolTip(QStringLiteral(
-                "如已连接ZCAN设备, 请断开所有ZCAN会话后重新扫描"));
+            ui->statusLabel->setToolTip(tr("如已连接ZCAN设备, 请断开所有ZCAN会话后重新扫描"));
         }
     } else {
         for (const auto &dev : devices) {
@@ -180,11 +183,10 @@ void SessionConfigDialog::scanDevices()
                 ui->deviceCombo->addItem(dev.name, dev.channel);
             }
         }
-        ui->statusLabel->setText(QString("✓ 检测到 %1 个设备").arg(devices.size()));
+        ui->statusLabel->setText(tr("✓ 检测到 %1 个设备").arg(devices.size()));
         if (adapterType == static_cast<int>(CanAdapterType::ZCAN)
             || adapterType == static_cast<int>(CanAdapterType::ZCANFD)) {
-            ui->statusLabel->setToolTip(QStringLiteral(
-                "已连接的ZCAN设备不会被重新扫描\n断开所有ZCAN会话后可获取最新设备列表"));
+            ui->statusLabel->setToolTip(tr("已连接的ZCAN设备不会被重新扫描\n断开所有ZCAN会话后可获取最新设备列表"));
         }
     }
 
@@ -199,13 +201,26 @@ void SessionConfigDialog::scanDevices()
 void SessionConfigDialog::onCanFdToggled(bool checked)
 {
     if (checked) {
-        ui->baudLabel->setText("仲裁域波特率:");
+        ui->baudLabel->setText(tr("仲裁域波特率:"));
         ui->fdGroup->setVisible(true);
     } else {
-        ui->baudLabel->setText("波特率:");
+        ui->baudLabel->setText(tr("波特率:"));
         ui->fdGroup->setVisible(false);
     }
     adjustSize();
+}
+
+void SessionConfigDialog::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        ui->retranslateUi(this);
+        // 重新设置程序化文本
+        ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("创建会话"));
+        ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("取消"));
+        // 刷新适配器列表和状态（不触发扫描）
+        onAdapterChanged();
+    }
+    QDialog::changeEvent(event);
 }
 
 bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCanFd,

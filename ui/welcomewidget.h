@@ -20,6 +20,7 @@ signals:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void changeEvent(QEvent *event) override;
 
 private:
     Ui::WelcomeWidget *ui;
