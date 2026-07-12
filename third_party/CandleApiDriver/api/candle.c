@@ -21,12 +21,22 @@
 
 #include "candle.h"
 #include <stdlib.h>
+#include <wchar.h>
 
 #include "candle_defs.h"
 #include "candle_ctrl_req.h"
 #include "ch_9.h"
 
 static bool candle_dev_interal_open(candle_handle hdev);
+
+// ─── gs_usb / candleLight 已知 VID:PID 组合 ─────────────────────
+// 当 GUID 枚举失败时，通过这些硬件 ID 回退查找 WinUSB 设备
+static const wchar_t *gsusb_hwid_patterns[] = {
+    L"VID_1D50&PID_606F",  // candleLight (OpenMoko)
+    L"VID_1D50&PID_60F0",  // candleLight FD 变体
+    L"VID_1209&PID_2323",  // generic gs_usb (CANABLE)
+};
+#define GSUSB_HWID_COUNT (sizeof(gsusb_hwid_patterns)/sizeof(gsusb_hwid_patterns[0]))
 
 static bool candle_read_di(HDEVINFO hdi, SP_DEVICE_INTERFACE_DATA interfaceData, candle_device_t *dev)
 {
@@ -76,25 +86,10 @@ static bool candle_read_di(HDEVINFO hdi, SP_DEVICE_INTERFACE_DATA interfaceData,
     return true;
 }
 
-bool __stdcall candle_list_scan(candle_list_handle *list)
+/// 在一个 GUID 下枚举 candle 设备，返回找到的设备数
+static bool candle_enum_with_guid(candle_list_t *l, const GUID *guid)
 {
-    if (list==NULL) {
-        return false;
-    }
-
-    candle_list_t *l = (candle_list_t *)calloc(1, sizeof(candle_list_t));
-    *list = l;
-    if (l==NULL) {
-        return false;
-    }
-
-    GUID guid;
-    if (CLSIDFromString(L"{c15b4308-04d3-11e6-b3ea-6057189e6443}", &guid) != NOERROR) {
-        l->last_error = CANDLE_ERR_CLSID;
-        return false;
-    }
-
-    HDEVINFO hdi = SetupDiGetClassDevs(&guid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    HDEVINFO hdi = SetupDiGetClassDevs(guid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (hdi == INVALID_HANDLE_VALUE) {
         l->last_error = CANDLE_ERR_GET_DEVICES;
         return false;
@@ -106,7 +101,7 @@ bool __stdcall candle_list_scan(candle_list_handle *list)
         SP_DEVICE_INTERFACE_DATA interfaceData;
         interfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 
-        if (SetupDiEnumDeviceInterfaces(hdi, NULL, &guid, i, &interfaceData)) {
+        if (SetupDiEnumDeviceInterfaces(hdi, NULL, guid, i, &interfaceData)) {
 
             if (!candle_read_di(hdi, interfaceData, &l->dev[i])) {
                 l->last_error = l->dev[i].last_error;
@@ -132,9 +127,132 @@ bool __stdcall candle_list_scan(candle_list_handle *list)
     }
 
     SetupDiDestroyDeviceInfoList(hdi);
-
     return rv;
+}
 
+/// 通过 USB VID/PID 硬件 ID 回退枚举 gs_usb 设备
+/// Zadig 安装 WinUSB 驱动时可能分配随机 GUID，此时只能通过硬件 ID 匹配
+static bool candle_enum_by_hwid(candle_list_t *l)
+{
+    // USB 设备接口 GUID (GUID_DEVINTERFACE_USB_DEVICE)
+    GUID usbDevGuid;
+    if (CLSIDFromString(L"{A5DCBF10-6530-11D2-901F-00C04FB951ED}", &usbDevGuid) != NOERROR)
+        return false;
+
+    HDEVINFO hdi = SetupDiGetClassDevs(&usbDevGuid, NULL, NULL,
+        DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (hdi == INVALID_HANDLE_VALUE)
+        return false;
+
+    unsigned dev_count = 0;
+    bool rv = true;
+
+    for (unsigned i = 0; dev_count < CANDLE_MAX_DEVICES; i++) {
+        SP_DEVICE_INTERFACE_DATA ifData;
+        ifData.cbSize = sizeof(ifData);
+
+        if (!SetupDiEnumDeviceInterfaces(hdi, NULL, &usbDevGuid, i, &ifData)) {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+
+        // 获取设备路径
+        ULONG required = 0;
+        SetupDiGetDeviceInterfaceDetail(hdi, &ifData, NULL, 0, &required, NULL);
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+            continue;
+
+        PSP_DEVICE_INTERFACE_DETAIL_DATA detail =
+            (PSP_DEVICE_INTERFACE_DETAIL_DATA)LocalAlloc(LMEM_FIXED, required);
+        if (!detail) continue;
+        detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+        if (!SetupDiGetDeviceInterfaceDetail(hdi, &ifData, detail, required, &required, NULL)) {
+            LocalFree(detail);
+            continue;
+        }
+
+        // 检查设备路径是否包含已知的 gs_usb VID/PID
+        bool is_gsusb = false;
+        for (unsigned p = 0; p < GSUSB_HWID_COUNT; p++) {
+            if (wcsstr(detail->DevicePath, gsusb_hwid_patterns[p])) {
+                is_gsusb = true;
+                break;
+            }
+        }
+
+        if (!is_gsusb) {
+            LocalFree(detail);
+            continue;
+        }
+
+        // 填充设备信息并验证
+        StringCchCopy(l->dev[dev_count].path, sizeof(l->dev[dev_count].path),
+                      detail->DevicePath);
+        LocalFree(detail);
+
+        if (candle_dev_interal_open(&l->dev[dev_count])) {
+            l->dev[dev_count].state = CANDLE_DEVSTATE_AVAIL;
+            candle_dev_close(&l->dev[dev_count]);
+        } else {
+            l->dev[dev_count].state = CANDLE_DEVSTATE_INUSE;
+        }
+        l->dev[dev_count].last_error = CANDLE_ERR_OK;
+        dev_count++;
+    }
+
+    l->num_devices = dev_count;
+    l->last_error = CANDLE_ERR_OK;
+
+    SetupDiDestroyDeviceInfoList(hdi);
+    return rv;
+}
+
+bool __stdcall candle_list_scan(candle_list_handle *list)
+{
+    if (list==NULL) {
+        return false;
+    }
+
+    candle_list_t *l = (candle_list_t *)calloc(1, sizeof(candle_list_t));
+    *list = l;
+    if (l==NULL) {
+        return false;
+    }
+
+    // 策略 1：尝试已知的设备接口 GUID
+    //   1a) candleLight/gs_usb 固件原始设备接口 GUID
+    //   1b) 标准 WinUSB 设备接口 GUID（Zadig 替换驱动后常见）
+    const wchar_t *guid_strings[] = {
+        L"{c15b4308-04d3-11e6-b3ea-6057189e6443}",
+        L"{DEE824EF-729B-4A0E-9C69-5FE45C3B8C7B}",
+    };
+
+    for (int g = 0; g < 2; g++) {
+        GUID guid;
+        if (CLSIDFromString(guid_strings[g], &guid) != NOERROR) {
+            continue;
+        }
+
+        if (candle_enum_with_guid(l, &guid) && l->num_devices > 0) {
+            return true;
+        }
+
+        // 该 GUID 没找到设备，重置再试下一个
+        l->num_devices = 0;
+        l->last_error = CANDLE_ERR_OK;
+    }
+
+    // 策略 2：已知 GUID 都没找到 → 通过 USB VID/PID 硬件 ID 回退枚举
+    //   （Zadig 可能分配了随机 GUID，只能通过硬件 ID 匹配）
+    if (candle_enum_by_hwid(l) && l->num_devices > 0) {
+        return true;
+    }
+
+    // 两种策略都没找到设备也是一种正常情况（无设备插入或不是 gs_usb）
+    l->last_error = CANDLE_ERR_OK;
+    return true;
 }
 
 bool __stdcall DLL candle_list_free(candle_list_handle list)
