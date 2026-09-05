@@ -48,6 +48,12 @@ jobs:
           git clone --depth 1 https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git libs/Qt-Advanced-Docking-System
           git clone --depth 1 https://github.com/Simsys/qhexedit2.git libs/qhexedit2
 
+      - name: Generate ads_version.h
+        shell: pwsh
+        run: |
+          Copy-Item "ci\ads_version.h" "libs\Qt-Advanced-Docking-System\src\ads_version.h"
+          Get-Content "libs\Qt-Advanced-Docking-System\src\ads_version.h" | Select-Object -First 1
+
       - name: Build (Release)
         shell: pwsh
         run: |
@@ -56,7 +62,8 @@ jobs:
           New-Item -ItemType Directory build | Out-Null
           Push-Location build
           qmake "CONFIG+=release" ../QCanAnalyzer.pro
-          mingw32-make -j$env:NUMBER_OF_PROCESSORS
+          $jobs = if ($env:NUMBER_OF_PROCESSORS) { $env:NUMBER_OF_PROCESSORS } else { 4 }
+          mingw32-make -j$jobs
           Pop-Location
 
       - name: Package (windeployqt + device DLLs)
@@ -119,6 +126,11 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git libs/Qt-Advanced-Docking-System
           git clone --depth 1 https://github.com/Simsys/qhexedit2.git libs/qhexedit2
+
+      - name: Generate ads_version.h
+        run: |
+          cp ci/ads_version.h libs/Qt-Advanced-Docking-System/src/ads_version.h
+          head -1 libs/Qt-Advanced-Docking-System/src/ads_version.h
 
       - name: Build (Release)
         run: |
