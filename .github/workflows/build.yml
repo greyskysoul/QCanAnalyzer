@@ -193,8 +193,10 @@ jobs:
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+          BIN=$(find . -maxdepth 2 -name QCanAnalyzer -type f | head -1)
+          echo "Binary: $BIN"
           mkdir -p AppDir/usr/bin
-          cp release/QCanAnalyzer AppDir/usr/bin/
+          cp "$BIN" AppDir/usr/bin/
           mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
           cp ../qcanalyzer.desktop AppDir/usr/share/applications/
           cp ../icon.png AppDir/usr/share/icons/hicolor/256x256/apps/
