@@ -27,9 +27,18 @@ jobs:
         run: |
           git lfs install --local
           git lfs pull
-          $dll = Get-Item third_party\pcan\PCANBasic.dll
-          if ($dll.Length -lt 1000) { throw "LFS file not materialized: $($dll.Length) bytes" }
-          Write-Host "LFS OK: PCANBasic.dll = $($dll.Length) bytes"
+          $base = "https://media.githubusercontent.com/media/greyskysoul/QCanAnalyzer/$env:GITHUB_REF_NAME"
+          foreach ($line in (git lfs ls-files)) {
+            $path = ($line -split '\s+')[-1]
+            $item = Get-Item $path
+            if ($item.Length -lt 1000) {
+              Write-Host "Fetching LFS fallback: $path"
+              curl.exe -sL --globoff -o $path "$base/$path"
+              $item = Get-Item $path
+            }
+            if ($item.Length -lt 1000) { throw "LFS file not materialized: $path ($($item.Length) bytes)" }
+            Write-Host "LFS OK: $path = $($item.Length) bytes"
+          }
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -116,9 +125,18 @@ jobs:
         run: |
           git lfs install --local
           git lfs pull
-          size=$(stat -c%s third_party/zcanfd/libControlCANFD.a)
-          if [ "$size" -lt 1000 ]; then echo "LFS file not materialized ($size bytes)"; exit 1; fi
-          echo "LFS OK: libControlCANFD.a = $size bytes"
+          base="https://media.githubusercontent.com/media/greyskysoul/QCanAnalyzer/$GITHUB_REF_NAME"
+          git lfs ls-files | while read -r line; do
+            path=$(echo "$line" | awk '{print $NF}')
+            size=$(stat -c%s "$path")
+            if [ "$size" -lt 1000 ]; then
+              echo "Fetching LFS fallback: $path"
+              curl -sL --globoff -o "$path" "$base/$path"
+              size=$(stat -c%s "$path")
+            fi
+            if [ "$size" -lt 1000 ]; then echo "LFS file not materialized: $path ($size bytes)"; exit 1; fi
+            echo "LFS OK: $path = $size bytes"
+          done
 
       - name: Install system dependencies
         run: |
