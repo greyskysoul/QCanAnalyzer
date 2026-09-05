@@ -158,8 +158,8 @@ unix:!macx {
     HEADERS += \
         can/socketcanadapter.h
 
-    # ZCANFD: Linux 静态链接 libcontrolcanfd.a
-    LIBS += -L$$PWD/third_party/zcanfd -lcontrolcanfd -lusb
+    # ZCANFD: Linux 静态链接 libControlCANFD.a
+    LIBS += -L$$PWD/third_party/zcanfd -lControlCANFD -lusb
 }
 
 # ── 虚拟适配器 (仅 Debug 模式) ──
