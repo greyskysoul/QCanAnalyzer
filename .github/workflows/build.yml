@@ -95,15 +95,19 @@ jobs:
         run: |
           $env:QTDIR = "$env:RUNNER_TEMP\Qt\5.15.2\mingw81_64"
           $env:PATH = "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin;$env:QTDIR\bin;$env:PATH"
-          $exeDir = "build\release"
-          windeployqt --dir "$exeDir" "$exeDir\QCanAnalyzer.exe"
-          Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libgcc_s_seh-1.dll" "$exeDir"
-          Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libstdc++-6.dll" "$exeDir"
-          Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libwinpthread-1.dll" "$exeDir"
-          Copy-Item third_party\pcan\PCANBasic.dll "$exeDir"
-          Copy-Item third_party\zcanfd\ControlCANFD.dll "$exeDir"
-          Copy-Item third_party\zcan\ControlCAN.dll "$exeDir"
-          Compress-Archive -Path "$exeDir\*" -DestinationPath "QCanAnalyzer-windows-x64.zip"
+          $stage = "deploy"
+          New-Item -ItemType Directory $stage | Out-Null
+          Copy-Item "build\release\QCanAnalyzer.exe" $stage
+          Copy-Item QCanAnalyzer_zh_CN.qm $stage
+          Copy-Item QCanAnalyzer_en_US.qm $stage
+          Copy-Item third_party\pcan\PCANBasic.dll $stage
+          Copy-Item third_party\zcanfd\ControlCANFD.dll $stage
+          Copy-Item third_party\zcan\ControlCAN.dll $stage
+          Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libgcc_s_seh-1.dll" $stage
+          Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libstdc++-6.dll" $stage
+          Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libwinpthread-1.dll" $stage
+          windeployqt --dir "$stage" "$stage\QCanAnalyzer.exe"
+          Compress-Archive -Path "$stage\*" -DestinationPath "QCanAnalyzer-windows-x64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
