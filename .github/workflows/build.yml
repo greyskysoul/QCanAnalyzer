@@ -31,8 +31,16 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade aqtinstall
-          python -m aqt install-qt windows desktop 5.15.2 win64_mingw81 -m qttools -O $env:RUNNER_TEMP\Qt
+          python -m aqt install-qt windows desktop 5.15.2 win64_mingw81 -O $env:RUNNER_TEMP\Qt
           python -m aqt install-tool windows desktop tools_mingw qt.tools.win64_mingw810 -O $env:RUNNER_TEMP\Qt
+
+      - name: Install Qt tools (lrelease)
+        shell: pwsh
+        run: |
+          $url = "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt5_5152/qt.qt5.5152.win64_mingw81/5.15.2-0-202011130602qttools-Windows-Windows_10-Mingw-Windows-Windows_10-X86_64.7z"
+          curl.exe -sL -o "$env:TEMP\qttools.7z" $url
+          tar -xf "$env:TEMP\qttools.7z" -C $env:RUNNER_TEMP\Qt
+          Test-Path "$env:RUNNER_TEMP\Qt\5.15.2\mingw81_64\bin\lrelease.exe"
 
       - name: Clone dependencies
         shell: pwsh
@@ -75,7 +83,7 @@ jobs:
 
   build-linux:
     name: Linux (GCC / Qt 5.15.2)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,7 +97,7 @@ jobs:
             libgl1-mesa-dev libxcb1-dev libxcb-xinerama0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-shape0 \
             libxkbcommon-x11-0 libdbus-1-3 libegl1-mesa libusb-1.0-0-dev \
-            libusb-dev patchelf file
+            libusb-dev patchelf file p7zip-full
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -99,7 +107,13 @@ jobs:
       - name: Install Qt 5.15.2
         run: |
           python3 -m pip install --upgrade aqtinstall
-          python3 -m aqt install-qt linux desktop 5.15.2 gcc_64 -m qttools -O $HOME/Qt
+          python3 -m aqt install-qt linux desktop 5.15.2 gcc_64 -O $HOME/Qt
+
+      - name: Install Qt tools (lrelease)
+        run: |
+          curl -sL -o $HOME/qttools.7z "https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt5_5152/qt.qt5.5152.gcc_64/5.15.2-0-202011130601qttools-Linux-RHEL_7_6-GCC-Linux-RHEL_7_6-X86_64.7z"
+          7z x $HOME/qttools.7z -o$HOME/Qt -y
+          test -f $HOME/Qt/5.15.2/gcc_64/bin/lrelease && echo "lrelease OK"
 
       - name: Clone dependencies
         run: |
