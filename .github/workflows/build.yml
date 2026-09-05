@@ -22,6 +22,15 @@ jobs:
         with:
           lfs: true
 
+      - name: Pull Git LFS files
+        shell: pwsh
+        run: |
+          git lfs install --local
+          git lfs pull
+          $dll = Get-Item third_party\pcan\PCANBasic.dll
+          if ($dll.Length -lt 1000) { throw "LFS file not materialized: $($dll.Length) bytes" }
+          Write-Host "LFS OK: PCANBasic.dll = $($dll.Length) bytes"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -78,7 +87,7 @@ jobs:
           $env:QTDIR = "$env:RUNNER_TEMP\Qt\5.15.2\mingw81_64"
           $env:PATH = "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin;$env:QTDIR\bin;$env:PATH"
           $exeDir = "build\release"
-          windeployqt --release --dir "$exeDir" "$exeDir\QCanAnalyzer.exe"
+          windeployqt --dir "$exeDir" "$exeDir\QCanAnalyzer.exe"
           Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libgcc_s_seh-1.dll" "$exeDir"
           Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libstdc++-6.dll" "$exeDir"
           Copy-Item "$env:RUNNER_TEMP\Qt\Tools\mingw810_64\bin\libwinpthread-1.dll" "$exeDir"
@@ -102,6 +111,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Pull Git LFS files
+        run: |
+          git lfs install --local
+          git lfs pull
+          size=$(stat -c%s third_party/zcanfd/libControlCANFD.a)
+          if [ "$size" -lt 1000 ]; then echo "LFS file not materialized ($size bytes)"; exit 1; fi
+          echo "LFS OK: libControlCANFD.a = $size bytes"
 
       - name: Install system dependencies
         run: |
