@@ -165,7 +165,7 @@ void MainWindow::setupMenuBar()
             "<p>CAN 总线调试分析工具</p>"
             "<p>PCAN &middot; gs_usb (candleLight) &middot; ZCANFD &middot; ZCAN &middot; SocketCAN</p>"
             "<p>CAN-FD 支持 &middot; 多通道识别 &middot; 帧间隔发送 &middot; 多会话停靠</p>"
-            "<p style='color:gray;'>AI 生成项目 — GitHub Copilot (DeepSeek V4 Pro)</p>"));
+            "<p style='color:gray;'>AI 生成项目 — GitHub Copilot (DeepSeek V4.1 Flash)</p>"));
         about.exec();
     });
     helpMenu->addAction(aboutAct);
@@ -242,17 +242,17 @@ void MainWindow::onNewSession()
     int channel = 0;
     CanBaudRate baud = CanBaudRate::BR_500K;
     bool isCanFd = false;
-    QString dataBaudText;
+    CanDataBaudRate dataBaud = CanDataBaudRate::None;
     int adapterType = 0;
     QString deviceName;
 
-    if (!dlg.configure(channel, baud, isCanFd, dataBaudText, adapterType, deviceName))
+    if (!dlg.configure(channel, baud, isCanFd, dataBaud, adapterType, deviceName))
         return;
 
     if (!m_canManager->hasSessions())
         hideWelcomePage();
 
-    m_canManager->createSession(channel, baud, isCanFd, adapterType, deviceName, dataBaudText);
+    m_canManager->createSession(channel, baud, isCanFd, adapterType, deviceName, dataBaud);
     statusBar()->showMessage(
         tr("已创建会话 — 当前共 %1 个会话").arg(m_canManager->sessionCount()), 3000);
 }

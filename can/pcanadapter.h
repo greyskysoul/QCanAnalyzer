@@ -25,7 +25,8 @@ public:
     ~PcanAdapter() override;
 
     QList<CanDeviceInfo> scanDevices() override;
-    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) override;
+    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K,
+              CanDataBaudRate dataBaud = CanDataBaudRate::None) override;
     void close() override;
     bool isOpen() const override;
     bool sendMessage(const CanMessage &msg) override;

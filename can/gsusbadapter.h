@@ -16,7 +16,8 @@ public:
     ~GsUsbAdapter() override;
 
     QList<CanDeviceInfo> scanDevices() override;
-    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) override;
+    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K,
+              CanDataBaudRate dataBaud = CanDataBaudRate::None) override;
     void close() override;
     bool isOpen() const override;
     bool sendMessage(const CanMessage &msg) override;
@@ -36,6 +37,7 @@ private:
     void *m_devHandle = nullptr;  // candle_handle
     void *m_devList = nullptr;    // candle_list_handle
     uint8_t m_channelIndex = 0;   // 当前打开的通道号
+    CanDataBaudRate m_dataBaud = CanDataBaudRate::None; // None = 经典 CAN
     bool   m_opened = false;
     bool   m_deviceLost = false;  // 设备是否已物理断开
     QTimer *m_readTimer = nullptr;

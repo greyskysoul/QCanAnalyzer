@@ -109,8 +109,9 @@ QList<CanDeviceInfo> ZcanAdapter::scanDevices()
     return devices;
 }
 
-bool ZcanAdapter::open(int channel, CanBaudRate baud)
+bool ZcanAdapter::open(int channel, CanBaudRate baud, CanDataBaudRate /*dataBaud*/)
 {
+    // USBCAN2 只有经典 CAN，无数据域
     if (m_opened) close();
 
     // 通道编码: bit[31:24]=type, bit[23:16]=devIdx, bit[7:0]=chIdx

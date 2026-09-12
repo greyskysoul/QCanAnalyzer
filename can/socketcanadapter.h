@@ -18,7 +18,8 @@ public:
     QList<CanDeviceInfo> scanDevices() override;
     /// @param ifName 接口名 (如 "can0", "vcan0")
     bool open(const QString &ifName);
-    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) override;
+    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K,
+              CanDataBaudRate dataBaud = CanDataBaudRate::None) override;
     void close() override;
     bool isOpen() const override;
     bool sendMessage(const CanMessage &msg) override;

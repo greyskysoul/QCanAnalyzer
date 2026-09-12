@@ -109,8 +109,10 @@ void CanSessionWidget::setupUi()
     ui->baudCombo->addItems({"1M", "800K", "500K", "250K", "125K", "100K", "50K", "20K", "10K", "5K"});
     ui->baudCombo->setCurrentText("500K");
 
-    ui->dataBaudCombo->addItems({"2M", "4M", "5M", "8M", "10M"});
-    ui->dataBaudCombo->setCurrentText("2M");
+    // 数据域波特率项由枚举派生，避免与 dataBaudRateString() 的字符串脱节
+    for (CanDataBaudRate r : selectableDataBaudRates())
+        ui->dataBaudCombo->addItem(dataBaudRateString(r));
+    ui->dataBaudCombo->setCurrentText(dataBaudRateString(CanDataBaudRate::BR_2M));
     ui->dataBaudLabel->setVisible(false);
     ui->dataBaudCombo->setVisible(false);
 
@@ -203,7 +205,8 @@ void CanSessionWidget::setupUi()
     onFilterChanged();
 }
 
-void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterType)
+void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterType,
+                                     CanDataBaudRate dataBaud)
 {
     if (m_can->isOpen())
         disconnectDevice();
@@ -275,7 +278,7 @@ void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterT
     else
         m_channelIndex = channel;
 
-    if (m_can->open(channel, baud)) {
+    if (m_can->open(channel, baud, dataBaud)) {
         updateUiState(true);
         refreshSendChannelCombo();
         updateChannelCheckboxes();
@@ -401,7 +404,7 @@ void CanSessionWidget::onConnectClicked()
     if (m_currentChannel >= 0) {
         CanBaudRate baud = baudRateFromString(ui->baudCombo->currentText());
 
-        connectDevice(m_currentChannel, baud, m_adapterType);
+        connectDevice(m_currentChannel, baud, m_adapterType, dataBaudRate());
     }
 }
 
@@ -784,9 +787,18 @@ void CanSessionWidget::setBaudRateText(const QString &text)
     ui->baudCombo->setCurrentText(text);
 }
 
-void CanSessionWidget::setDataBaudRateText(const QString &text)
+void CanSessionWidget::setDataBaudRate(CanDataBaudRate dataBaud)
 {
-    ui->dataBaudCombo->setCurrentText(text);
+    const QString text = dataBaudRateString(dataBaud);
+    if (!text.isEmpty())
+        ui->dataBaudCombo->setCurrentText(text);
+}
+
+CanDataBaudRate CanSessionWidget::dataBaudRate() const
+{
+    if (!m_isCanFd)
+        return CanDataBaudRate::None;
+    return dataBaudRateFromString(ui->dataBaudCombo->currentText());
 }
 
 void CanSessionWidget::onSendDlcChanged(int dlc)

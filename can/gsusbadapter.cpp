@@ -10,6 +10,75 @@ extern "C" {
 #include <third_party/CandleApiDriver/api/candle.h>
 }
 
+namespace {
+
+/// 按 比特率误差 > 采样点接近 80% > tq 总数 的优先级挑选最优 bittiming。
+/// 不用 candle_channel_set_bitrate 的自动估算：它可能选出精度差的 brp/tq 组合，
+/// 位时序偏差在直连场景（如 PCAN <-> candleLight）下会累积并引发 Bus-Off。
+bool findBittiming(const candle_capability_t &caps, uint32_t bitrate,
+                   candle_bittiming_t *out, QString *error)
+{
+    struct Candidate {
+        candle_bittiming_t timing;
+        uint32_t tqTotal;
+        uint32_t bitrateErr;   // |actual - target|
+        uint32_t samplePoint;  // x1000
+    };
+
+    const uint32_t errThreshold = bitrate / 1000; // 0.1% 偏差以内
+    QList<Candidate> candidates;
+
+    for (uint32_t brp = caps.brp_min; brp <= caps.brp_max; brp += caps.brp_inc) {
+        if (brp == 0) continue;
+        const uint32_t tqTotal = static_cast<uint32_t>(
+            static_cast<double>(caps.fclk_can) / (brp * bitrate) + 0.5);
+        if (tqTotal < 4 || tqTotal > 25) continue;
+
+        const uint32_t actual = caps.fclk_can / (brp * tqTotal);
+        const uint32_t err = (actual > bitrate) ? (actual - bitrate) : (bitrate - actual);
+        if (err > errThreshold) continue;
+
+        for (uint32_t tseg2 = caps.tseg2_min; tseg2 <= caps.tseg2_max && tseg2 < tqTotal; ++tseg2) {
+            const uint32_t tseg1 = tqTotal - 1 - tseg2;
+            if (tseg1 < caps.tseg1_min || tseg1 > caps.tseg1_max) continue;
+
+            const uint32_t sp = (1 + tseg1) * 1000 / tqTotal;
+            if (sp < 680 || sp > 875) continue;
+
+            Candidate c;
+            c.timing.prop_seg = 1;
+            c.timing.phase_seg1 = tseg1 - 1;
+            c.timing.phase_seg2 = tseg2;
+            c.timing.sjw = caps.sjw_max; // 最大 SJW 容忍时钟偏差
+            c.timing.brp = brp;
+            c.tqTotal = tqTotal;
+            c.bitrateErr = err;
+            c.samplePoint = sp;
+            candidates.append(c);
+        }
+    }
+
+    if (candidates.isEmpty()) {
+        *error = QString("无法为 %1 Hz 找到精确的 bittiming (fclk=%2)")
+                     .arg(bitrate).arg(caps.fclk_can);
+        return false;
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+        [](const Candidate &a, const Candidate &b) {
+            if (a.bitrateErr != b.bitrateErr) return a.bitrateErr < b.bitrateErr;
+            const uint32_t da = (a.samplePoint > 800) ? a.samplePoint - 800 : 800 - a.samplePoint;
+            const uint32_t db = (b.samplePoint > 800) ? b.samplePoint - 800 : 800 - b.samplePoint;
+            if (da != db) return da < db;
+            return a.tqTotal > b.tqTotal;
+        });
+
+    *out = candidates.first().timing;
+    return true;
+}
+
+} // namespace
+
 GsUsbAdapter::GsUsbAdapter(QObject *parent)
     : CanInterface(parent)
 {
@@ -65,7 +134,7 @@ QList<CanDeviceInfo> GsUsbAdapter::scanDevices()
     return devices;
 }
 
-bool GsUsbAdapter::open(int channel, CanBaudRate baud)
+bool GsUsbAdapter::open(int channel, CanBaudRate baud, CanDataBaudRate dataBaud)
 {
     if (m_opened) close();
 
@@ -100,22 +169,7 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
         return false;
     }
 
-    // 不用 candle_channel_set_bitrate 的自动估算: 它可能选出精度差的 brp/tq 组合，
-    // 位时序偏差在直连场景 (如 PCAN <-> candleLight) 下会累积并引发 Bus-Off。
-    uint32_t bitrate = 500000;
-    switch (baud) {
-    case CanBaudRate::BR_1M:   bitrate = 1000000; break;
-    case CanBaudRate::BR_800K: bitrate = 800000;  break;
-    case CanBaudRate::BR_500K: bitrate = 500000;  break;
-    case CanBaudRate::BR_250K: bitrate = 250000;  break;
-    case CanBaudRate::BR_125K: bitrate = 125000;  break;
-    case CanBaudRate::BR_100K: bitrate = 100000;  break;
-    case CanBaudRate::BR_50K:  bitrate = 50000;   break;
-    case CanBaudRate::BR_20K:  bitrate = 20000;   break;
-    case CanBaudRate::BR_10K:  bitrate = 10000;   break;
-    case CanBaudRate::BR_5K:   bitrate = 5000;    break;
-    default: break;
-    }
+    const bool fdEnabled = (dataBaud != CanDataBaudRate::None);
 
     candle_capability_t caps;
     if (!candle_channel_get_capabilities(hdev, ch, &caps)) {
@@ -125,83 +179,49 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
         return false;
     }
 
-    // 按 比特率误差 > 采样点接近 80% > tq 总数 的优先级筛选候选
-    struct BittimingCandidate {
-        candle_bittiming_t timing;
-        uint32_t tq_total;
-        uint32_t actual_bitrate;
-        uint32_t bitrate_err;   // |actual - target|
-        uint32_t sample_point;  // x1000
-    };
+    QString bittimingError;
+    candle_bittiming_t timing;
+    if (!findBittiming(caps, baudRateHz(baud), &timing, &bittimingError)) {
+        candle_dev_free(hdev);
+        candle_list_free(list);
+        emit errorOccurred("gs_usb: 仲裁域 " + bittimingError);
+        return false;
+    }
 
-    QList<BittimingCandidate> candidates;
-    const uint32_t ERR_THRESHOLD = bitrate / 1000; // 0.1% 偏差以内才接受
-
-    for (uint32_t brp = caps.brp_min; brp <= caps.brp_max; brp += caps.brp_inc) {
-        if (brp == 0) continue;
-        double tq_total_f = static_cast<double>(caps.fclk_can) / (brp * bitrate);
-        uint32_t tq_total = static_cast<uint32_t>(tq_total_f + 0.5);
-        if (tq_total < 4 || tq_total > 25) continue;
-
-        // 验证实际比特率偏差
-        uint32_t actual_bitrate = caps.fclk_can / (brp * tq_total);
-        uint32_t err = (actual_bitrate > bitrate)
-            ? (actual_bitrate - bitrate) : (bitrate - actual_bitrate);
-        if (err > ERR_THRESHOLD) continue;
-
-        for (uint32_t tseg2 = caps.tseg2_min; tseg2 <= caps.tseg2_max && tseg2 < tq_total; tseg2++) {
-            uint32_t tseg1 = tq_total - 1 - tseg2;
-            if (tseg1 < caps.tseg1_min || tseg1 > caps.tseg1_max) continue;
-
-            uint32_t sp = (1 + tseg1) * 1000 / tq_total;
-            if (sp < 680 || sp > 875) continue;
-
-            BittimingCandidate c;
-            c.timing.prop_seg = 1;
-            c.timing.phase_seg1 = tseg1 - 1;
-            c.timing.phase_seg2 = tseg2;
-            c.timing.sjw = caps.sjw_max; // 用最大 SJW 容忍时钟偏差
-            c.timing.brp = brp;
-            c.tq_total = tq_total;
-            c.actual_bitrate = actual_bitrate;
-            c.bitrate_err = err;
-            c.sample_point = sp;
-            candidates.append(c);
+    candle_bittiming_t dataTiming;
+    if (fdEnabled) {
+        if (!(caps.feature & CANDLE_FEATURE_FD)) {
+            candle_dev_free(hdev);
+            candle_list_free(list);
+            emit errorOccurred("gs_usb: 设备不支持 CAN FD");
+            return false;
+        }
+        if (!findBittiming(caps, dataBaudRateHz(dataBaud), &dataTiming, &bittimingError)) {
+            candle_dev_free(hdev);
+            candle_list_free(list);
+            emit errorOccurred("gs_usb: 数据域 " + bittimingError);
+            return false;
         }
     }
 
-    if (candidates.isEmpty()) {
-        candle_dev_free(hdev);
-        candle_list_free(list);
-        emit errorOccurred(QString("gs_usb: 无法为 bitrate=%1 找到精确的 bittiming (fclk=%2)")
-                           .arg(bitrate).arg(caps.fclk_can));
-        return false;
-    }
-
-    // 优先级: 比特率误差最小 > 采样点最接近 80% > tq 总数更大
-    std::sort(candidates.begin(), candidates.end(),
-        [](const BittimingCandidate &a, const BittimingCandidate &b) {
-            if (a.bitrate_err != b.bitrate_err)
-                return a.bitrate_err < b.bitrate_err;
-            uint32_t da = (a.sample_point > 800) ? (a.sample_point - 800) : (800 - a.sample_point);
-            uint32_t db = (b.sample_point > 800) ? (b.sample_point - 800) : (800 - b.sample_point);
-            if (da != db) return da < db;
-            return a.tq_total > b.tq_total;
-        });
-
-    const BittimingCandidate &best = candidates.first();
-    candle_bittiming_t timing = best.timing;
-
     if (!candle_channel_set_timing(hdev, ch, &timing)) {
-        candle_err_t err2 = candle_dev_last_error(hdev);
+        candle_err_t err = candle_dev_last_error(hdev);
         candle_dev_free(hdev);
         candle_list_free(list);
-        emit errorOccurred(QString("gs_usb: 设置 bittiming 失败 (err=%1)").arg(static_cast<int>(err2)));
+        emit errorOccurred(QString("gs_usb: 设置仲裁域 bittiming 失败 (err=%1)").arg(static_cast<int>(err)));
         return false;
     }
 
-    // 普通模式启动 (总线上至少需要另一个节点才能成功 ACK)
-    if (!candle_channel_start(hdev, ch, 0)) {
+    if (fdEnabled && !candle_channel_set_data_timing(hdev, ch, &dataTiming)) {
+        candle_err_t err = candle_dev_last_error(hdev);
+        candle_dev_free(hdev);
+        candle_list_free(list);
+        emit errorOccurred(QString("gs_usb: 设置数据域 bittiming 失败 (err=%1)").arg(static_cast<int>(err)));
+        return false;
+    }
+
+    // CAN-FD 必须以 FD 模式启动；普通模式要求总线上至少还有另一个节点才能 ACK
+    if (!candle_channel_start(hdev, ch, fdEnabled ? CANDLE_MODE_FD : 0)) {
         candle_err_t err = candle_dev_last_error(hdev);
         candle_dev_free(hdev);
         candle_list_free(list);
@@ -212,6 +232,7 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
     m_devHandle = hdev;
     m_devList = list;
     m_channelIndex = ch;
+    m_dataBaud = dataBaud;
     m_opened = true;
     m_deviceLost = false;
 
@@ -272,6 +293,11 @@ bool GsUsbAdapter::sendMessage(const CanMessage &msg)
         frame.can_id |= CANDLE_ID_RTR;
     // candle/gs_usb 的 can_dlc 是 DLC 编码，而 CanMessage::dlc 是字节数
     frame.can_dlc = canFdLenToDlc(msg.dlc);
+    if (msg.isFd) {
+        frame.flags |= CANDLE_FLAG_FD;
+        if (m_dataBaud != CanDataBaudRate::None)
+            frame.flags |= CANDLE_FLAG_BRS; // 数据段切换到数据域波特率
+    }
     for (int i = 0; i < msg.dlc && i < 64; ++i)
         frame.data[i] = msg.data[i];
 
@@ -303,9 +329,9 @@ void GsUsbAdapter::onReadTimer()
 
             CanMessage msg;
             msg.id = candle_frame_id(&frame);
-            // DLC 编码 > 8 即为 CAN FD 帧
+            // 以 CANDLE_FLAG_FD 为准；部分固件不置位，故保留 DLC 编码 > 8 的兼容判断
             uint8_t rawDlc = candle_frame_dlc(&frame);
-            msg.isFd = (rawDlc > 8);
+            msg.isFd = (frame.flags & CANDLE_FLAG_FD) != 0 || rawDlc > 8;
             msg.dlc = static_cast<uint8_t>(canFdDlcToLen(rawDlc));
             msg.direction = CanDirection::Rx;
             msg.channel = m_channelIndex;
@@ -368,7 +394,9 @@ void GsUsbAdapter::recoverChannel()
     // 给固件留出处理时间
     QThread::msleep(10);
 
-    if (!candle_channel_start(dev, ch, 0)) {
+    // 用与 open() 相同的模式标志重启，否则 FD 会话会退回经典 CAN
+    const uint32_t restartFlags = (m_dataBaud != CanDataBaudRate::None) ? CANDLE_MODE_FD : 0;
+    if (!candle_channel_start(dev, ch, restartFlags)) {
         candle_err_t err = candle_dev_last_error(dev);
         qWarning() << "gs_usb: candle_channel_start failed, err=" << static_cast<int>(err);
         m_recovering = false;

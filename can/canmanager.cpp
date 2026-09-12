@@ -29,15 +29,14 @@ CanManager::~CanManager()
 CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
                                             bool isCanFd, int adapterType,
                                             const QString &deviceName,
-                                            const QString &dataBaudText)
+                                            CanDataBaudRate dataBaud)
 {
     int id = m_nextSessionId++;
 
     auto *widget = new CanSessionWidget(id);
     widget->setCanFdEnabled(isCanFd);
     widget->setBaudRateText(baudRateString(baud));
-    if (isCanFd && !dataBaudText.isEmpty())
-        widget->setDataBaudRateText(dataBaudText);
+    widget->setDataBaudRate(dataBaud);
     m_sessions[id] = widget;
 
     // 配置对话框选定的设备名优先，否则按适配器类型生成

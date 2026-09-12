@@ -345,8 +345,8 @@ Multiple conditions separated by comma</translation>
     </message>
     <message>
         <location filename="mainwindow.cpp" line="249"/>
-        <source>&lt;h3&gt;QCanAnalyzer v1.0&lt;/h3&gt;&lt;p&gt;CAN 总线调试分析工具&lt;/p&gt;&lt;p&gt;PCAN &amp;middot; gs_usb (candleLight) &amp;middot; ZCANFD &amp;middot; ZCAN &amp;middot; SocketCAN&lt;/p&gt;&lt;p&gt;CAN-FD 支持 &amp;middot; 多通道识别 &amp;middot; 帧间隔发送 &amp;middot; 多会话停靠&lt;/p&gt;&lt;p style=&apos;color:gray;&apos;&gt;AI 生成项目 — GitHub Copilot (DeepSeek V4 Pro)&lt;/p&gt;</source>
-        <translation>&lt;h3&gt;QCanAnalyzer v1.0&lt;/h3&gt;&lt;p&gt;CAN Bus Debug &amp;amp; Analysis Tool&lt;/p&gt;&lt;p&gt;PCAN &amp;middot; gs_usb (candleLight) &amp;middot; ZCANFD &amp;middot; ZCAN &amp;middot; SocketCAN&lt;/p&gt;&lt;p&gt;CAN-FD Support &amp;middot; Multi-Channel &amp;middot; Frame Interval Send &amp;middot; Multi-Session Docking&lt;/p&gt;&lt;p style=&apos;color:gray;&apos;&gt;AI Generated — GitHub Copilot (DeepSeek V4 Pro)&lt;/p&gt;</translation>
+        <source>&lt;h3&gt;QCanAnalyzer v1.0&lt;/h3&gt;&lt;p&gt;CAN 总线调试分析工具&lt;/p&gt;&lt;p&gt;PCAN &amp;middot; gs_usb (candleLight) &amp;middot; ZCANFD &amp;middot; ZCAN &amp;middot; SocketCAN&lt;/p&gt;&lt;p&gt;CAN-FD 支持 &amp;middot; 多通道识别 &amp;middot; 帧间隔发送 &amp;middot; 多会话停靠&lt;/p&gt;&lt;p style=&apos;color:gray;&apos;&gt;AI 生成项目 — GitHub Copilot (DeepSeek V4.1 Flash)&lt;/p&gt;</source>
+        <translation>&lt;h3&gt;QCanAnalyzer v1.0&lt;/h3&gt;&lt;p&gt;CAN Bus Debug &amp;amp; Analysis Tool&lt;/p&gt;&lt;p&gt;PCAN &amp;middot; gs_usb (candleLight) &amp;middot; ZCANFD &amp;middot; ZCAN &amp;middot; SocketCAN&lt;/p&gt;&lt;p&gt;CAN-FD Support &amp;middot; Multi-Channel &amp;middot; Frame Interval Send &amp;middot; Multi-Session Docking&lt;/p&gt;&lt;p style=&apos;color:gray;&apos;&gt;AI Generated — GitHub Copilot (DeepSeek V4.1 Flash)&lt;/p&gt;</translation>
     </message>
     <message>
         <location filename="mainwindow.cpp" line="259"/>

@@ -67,24 +67,7 @@ QList<CanDeviceInfo> ZcanFdAdapter::scanDevices()
     return devices;
 }
 
-UINT ZcanFdAdapter::baudToHz(CanBaudRate baud) const
-{
-    switch (baud) {
-    case CanBaudRate::BR_1M:   return 1000000;
-    case CanBaudRate::BR_800K: return 800000;
-    case CanBaudRate::BR_500K: return 500000;
-    case CanBaudRate::BR_250K: return 250000;
-    case CanBaudRate::BR_125K: return 125000;
-    case CanBaudRate::BR_100K: return 100000;
-    case CanBaudRate::BR_50K:  return 50000;
-    case CanBaudRate::BR_20K:  return 20000;
-    case CanBaudRate::BR_10K:  return 10000;
-    case CanBaudRate::BR_5K:   return 5000;
-    default: return 500000;
-    }
-}
-
-bool ZcanFdAdapter::open(int channel, CanBaudRate baud)
+bool ZcanFdAdapter::open(int channel, CanBaudRate baud, CanDataBaudRate dataBaud)
 {
     if (m_opened) close();
 
@@ -113,13 +96,14 @@ bool ZcanFdAdapter::open(int channel, CanBaudRate baud)
     else
         m_totalChannels = 2;
 
-    // 仲裁域用选定的波特率，数据域固定 2MHz
-    UINT baudHz = baudToHz(baud);
-    UINT dataBaudHz = 2000000;
+    // 仲裁域始终按选定波特率；数据域仅在 FD 会话（dataBaud != None）中配置
+    const UINT abitHz = baudRateHz(baud);
+    const bool fdEnabled = (dataBaud != CanDataBaudRate::None);
     for (int ch = 0; ch < m_totalChannels; ++ch) {
         ZCAN_SetCANFDStandard(m_devHandle, static_cast<UINT>(ch), 0);  // 0=ISO
-        ZCAN_SetAbitBaud(m_devHandle, static_cast<UINT>(ch), baudHz);
-        ZCAN_SetDbitBaud(m_devHandle, static_cast<UINT>(ch), dataBaudHz);
+        ZCAN_SetAbitBaud(m_devHandle, static_cast<UINT>(ch), abitHz);
+        if (fdEnabled)
+            ZCAN_SetDbitBaud(m_devHandle, static_cast<UINT>(ch), dataBaudRateHz(dataBaud));
     }
 
     m_openChannels.clear();

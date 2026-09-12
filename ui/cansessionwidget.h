@@ -52,7 +52,9 @@ public:
 
     int sessionId() const { return m_sessionId; }
 
-    void connectDevice(int channel, CanBaudRate baud, int adapterType = 0);
+    /// @param dataBaud 数据域波特率；None 表示经典 CAN
+    void connectDevice(int channel, CanBaudRate baud, int adapterType = 0,
+                       CanDataBaudRate dataBaud = CanDataBaudRate::None);
     void disconnectDevice();
     bool isConnected() const;
 
@@ -61,7 +63,10 @@ public:
 
     /// 同步配置页面的波特率到标签页 UI
     void setBaudRateText(const QString &text);
-    void setDataBaudRateText(const QString &text);
+    void setDataBaudRate(CanDataBaudRate dataBaud);
+
+    /// 当前 UI 上选定的数据域波特率；未启用 CAN-FD 时为 None
+    CanDataBaudRate dataBaudRate() const;
 
 signals:
     void deviceDisconnected(int sessionId);

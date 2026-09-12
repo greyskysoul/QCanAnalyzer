@@ -11,7 +11,7 @@
 > 支持 **PCAN、gs_usb (candleLight)、ZCANFD (ZLG USBCANFD)、ZCAN (ZLG USBCAN)、SocketCAN、MockCAN** 六大适配器。
 > 仅支持 Windows / Linux（MinGW 或 GCC）；无硬件时可用 Debug 构建的 MockCAN 测试。
 
-> ⚠️ **AI 声明**: 本项目 100% 由 GitHub Copilot (DeepSeek V4 Pro) 在 VS Code 中生成，包括但不限于：工程结构设计、多适配器架构、Qt Advanced Docking System 集成、所有 UI 布局与样式、CAN 报文收发逻辑。人工仅负责提出需求和编译验证。
+> ⚠️ **AI 声明**: 本项目 100% 由 GitHub Copilot (DeepSeek V4.1 Flash) 在 VS Code 中生成，包括但不限于：工程结构设计、多适配器架构、Qt Advanced Docking System 集成、所有 UI 布局与样式、CAN 报文收发逻辑。人工仅负责提出需求和编译验证。
 
 ---
 
@@ -31,7 +31,7 @@
 - 🔌 **多设备支持** — PCAN (PEAK USB/PCI)、gs_usb (candleLight)、ZCANFD/ZCAN (ZLG USBCANFD)、SocketCAN (Linux)、MockCAN (虚拟)
 - 🐧 **跨平台** — Windows + Linux，Linux 下原生支持 SocketCAN，自动隐藏不可用适配器
 - 🪟 **多会话停靠** — 基于 Qt Advanced Docking System，同时开启多个 CAN 会话，标签页分组、自由拖拽布局
-- 📡 **CAN-FD 支持** — DLC 0~64，数据输入框支持 64 字节十六进制数据
+- 📡 **CAN-FD 支持** — DLC 0~64，数据输入框支持 64 字节十六进制数据；仲裁域与数据域波特率可分别设置
 - 📥 **灵活发送** — 标准帧/扩展帧/远程帧；周期发送（锁定周期防误触）；指定帧数批量发送；发送中可随时打断
 - 🔢 **十六进制输入** — 数据输入自动过滤非法字符，仅保留 0-9、A-F、空格
 - 🔍 **软过滤器** — ID 掩码过滤 + 通道使能复选框，可灵活筛选关注的报文

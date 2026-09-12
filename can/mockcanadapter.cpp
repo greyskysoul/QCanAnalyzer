@@ -30,12 +30,13 @@ QList<CanDeviceInfo> MockCanAdapter::scanDevices()
     return devices;
 }
 
-bool MockCanAdapter::open(int /*channel*/, CanBaudRate /*baud*/)
+bool MockCanAdapter::open(int /*channel*/, CanBaudRate /*baud*/, CanDataBaudRate dataBaud)
 {
     if (m_opened)
         close();
 
     m_opened  = true;
+    m_dataBaud = dataBaud;
     m_msgCounter = 0;
 
     if (m_rxTimer->interval() <= 0)
@@ -85,7 +86,7 @@ CanMessage MockCanAdapter::generateRandomMessage(int channel)
     msg.timestamp = QDateTime::currentDateTime();
     msg.direction = CanDirection::Rx;
     msg.channel   = channel;
-    msg.isFd      = false;
+    msg.isFd      = isFdEnabled();
 
     if (rng->bounded(10) < 2) { // 20% 扩展帧
         msg.id   = rng->bounded(0x1FFFFFFF);
@@ -95,7 +96,14 @@ CanMessage MockCanAdapter::generateRandomMessage(int channel)
         msg.type = CanFrameType::StandardData;
     }
 
-    msg.dlc = static_cast<uint8_t>(rng->bounded(1, 9));
+    if (msg.isFd) {
+        // FD 只能使用 0~8/12/16/20/24/32/48/64 这些长度，随机取一个以覆盖长帧显示路径
+        static const uint8_t fdLens[] = {8, 12, 16, 20, 24, 32, 48, 64};
+        msg.dlc = fdLens[rng->bounded(int(sizeof(fdLens)))];
+    } else {
+        msg.dlc = static_cast<uint8_t>(rng->bounded(1, 9));
+    }
+
     for (int i = 0; i < msg.dlc; ++i)
         msg.data[i] = static_cast<uint8_t>(rng->bounded(256));
 
@@ -103,8 +111,8 @@ CanMessage MockCanAdapter::generateRandomMessage(int channel)
     if (m_msgCounter % 5 == 0) {
         msg.id = 0x123;
         msg.type = CanFrameType::StandardData;
-        msg.dlc = 8;
-        for (int i = 0; i < 8; ++i)
+        msg.dlc = msg.isFd ? 64 : 8;
+        for (int i = 0; i < msg.dlc; ++i)
             msg.data[i] = static_cast<uint8_t>((m_msgCounter + i) & 0xFF);
     }
 

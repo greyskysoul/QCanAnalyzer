@@ -145,9 +145,11 @@ bool SocketCanAdapter::open(const QString &ifName)
 #endif
 }
 
-bool SocketCanAdapter::open(int channel, CanBaudRate baud)
+bool SocketCanAdapter::open(int channel, CanBaudRate baud, CanDataBaudRate dataBaud)
 {
+    // 波特率（含 FD 数据域）由内核按 `ip link` 配置决定，此处不接收
     Q_UNUSED(baud);
+    Q_UNUSED(dataBaud);
 
 #ifndef Q_OS_LINUX
     Q_UNUSED(channel);

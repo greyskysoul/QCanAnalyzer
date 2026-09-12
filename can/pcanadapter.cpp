@@ -160,8 +160,9 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
     return devices;
 }
 
-bool PcanAdapter::open(int channel, CanBaudRate baud)
+bool PcanAdapter::open(int channel, CanBaudRate baud, CanDataBaudRate /*dataBaud*/)
 {
+    // 本适配器用的是 PCAN Basic 经典 API，无数据域概念
     if (!m_loaded) return false;
     if (m_opened) close();
 

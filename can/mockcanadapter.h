@@ -15,7 +15,9 @@ public:
     ~MockCanAdapter() override;
 
     QList<CanDeviceInfo> scanDevices() override;
-    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) override;
+    /// @param dataBaud 非 None 时进入 CAN-FD 模式，生成更长的报文
+    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K,
+              CanDataBaudRate dataBaud = CanDataBaudRate::None) override;
     void close() override;
     bool isOpen() const override;
     bool sendMessage(const CanMessage &msg) override;
@@ -28,8 +30,10 @@ private slots:
 
 private:
     CanMessage generateRandomMessage(int channel);
+    bool isFdEnabled() const { return m_dataBaud != CanDataBaudRate::None; }
 
     bool      m_opened = false;
+    CanDataBaudRate m_dataBaud = CanDataBaudRate::None;
     QTimer   *m_rxTimer = nullptr;
     uint32_t  m_msgCounter = 0; // 用于生成有规律变化的数据
 };

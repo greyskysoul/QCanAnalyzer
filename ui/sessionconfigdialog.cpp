@@ -55,8 +55,10 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
 
     connect(ui->canFdChk, &QCheckBox::toggled, this, &SessionConfigDialog::onCanFdToggled);
 
-    ui->dataBaudCombo->addItems({"2M", "4M", "5M", "8M", "10M"});
-    ui->dataBaudCombo->setCurrentText("2M");
+    // 数据域波特率项由枚举派生，避免与 dataBaudRateString() 的字符串脱节
+    for (CanDataBaudRate r : selectableDataBaudRates())
+        ui->dataBaudCombo->addItem(dataBaudRateString(r));
+    ui->dataBaudCombo->setCurrentText(dataBaudRateString(CanDataBaudRate::BR_2M));
     ui->fdGroup->setVisible(false);
 
     ui->statusLabel->setStyleSheet("color: #7f8c8d; font-size: 12px;");
@@ -212,7 +214,7 @@ void SessionConfigDialog::changeEvent(QEvent *event)
 }
 
 bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCanFd,
-                                    QString &dataBaudText, int &adapterType, QString &deviceName)
+                                    CanDataBaudRate &dataBaud, int &adapterType, QString &deviceName)
 {
     if (exec() != QDialog::Accepted)
         return false;
@@ -222,7 +224,8 @@ bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCan
     deviceName = ui->deviceCombo->currentText().section("  [", 0, 0).trimmed();
     baud = baudRateFromString(ui->baudCombo->currentText());
     isCanFd = ui->canFdChk->isChecked();
-    dataBaudText = isCanFd ? ui->dataBaudCombo->currentText() : QString();
+    dataBaud = isCanFd ? dataBaudRateFromString(ui->dataBaudCombo->currentText())
+                       : CanDataBaudRate::None;
 
     return true;
 }

@@ -17,7 +17,8 @@ public:
     ~ZcanFdAdapter() override;
 
     QList<CanDeviceInfo> scanDevices() override;
-    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) override;
+    bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K,
+              CanDataBaudRate dataBaud = CanDataBaudRate::None) override;
     void close() override;
     bool isOpen() const override;
     bool sendMessage(const CanMessage &msg) override;
@@ -33,7 +34,6 @@ public:
 private:
     void onReadTimer();
     void pollMessages();
-    UINT baudToHz(CanBaudRate baud) const;
 
     DEVICE_HANDLE   m_devHandle = nullptr;
     UINT            m_deviceType = USBCANFD_200U;

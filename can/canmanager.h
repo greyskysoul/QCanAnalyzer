@@ -24,7 +24,7 @@ public:
     CanSessionWidget *createSession(int channel, CanBaudRate baud,
                                     bool isCanFd = false, int adapterType = 0,
                                     const QString &deviceName = {},
-                                    const QString &dataBaudText = {});
+                                    CanDataBaudRate dataBaud = CanDataBaudRate::None);
     void closeSession(int sessionId);
 
     QList<CanSessionWidget*> sessions() const;
