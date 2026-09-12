@@ -146,6 +146,9 @@ void SessionConfigDialog::scanDevices()
         break;
     }
 #endif
+    default:
+        // 当前平台不提供该适配器
+        break;
     }
 
     if (devices.isEmpty()) {

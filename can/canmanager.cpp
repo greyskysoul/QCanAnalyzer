@@ -40,20 +40,23 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
         widget->setDataBaudRateText(dataBaudText);
     m_sessions[id] = widget;
 
-    QString devName;
-    switch (static_cast<CanAdapterType>(adapterType)) {
+    // 配置对话框选定的设备名优先，否则按适配器类型生成
+    QString devName = deviceName;
+    if (devName.isEmpty()) {
+        switch (static_cast<CanAdapterType>(adapterType)) {
 #ifndef Q_OS_LINUX
-    case CanAdapterType::PCAN:     devName = PcanAdapter::channelName(channel); break;
-    case CanAdapterType::GsUsb:    devName = GsUsbAdapter::channelName(channel); break;
+        case CanAdapterType::PCAN:  devName = PcanAdapter::channelName(channel); break;
+        case CanAdapterType::GsUsb: devName = GsUsbAdapter::channelName(channel); break;
 #endif
-    case CanAdapterType::ZCANFD:  devName = ZcanFdAdapter::channelName(channel); break;
+        case CanAdapterType::ZCANFD: devName = ZcanFdAdapter::channelName(channel); break;
 #ifndef Q_OS_LINUX
-    case CanAdapterType::ZCAN:    devName = ZcanAdapter::channelName(channel); break;
+        case CanAdapterType::ZCAN:  devName = ZcanAdapter::channelName(channel); break;
 #endif
 #ifdef Q_OS_LINUX
-    case CanAdapterType::SocketCAN:devName = deviceName.isEmpty() ? QString("can0") : deviceName; break;
+        case CanAdapterType::SocketCAN: devName = "can0"; break;
 #endif
-    default: devName = QString("CAN-%1").arg(channel);
+        default: devName = QString("CAN-%1").arg(channel); break;
+        }
     }
 
     auto *dockWidget = new ads::CDockWidget(m_dockManager, devName);
