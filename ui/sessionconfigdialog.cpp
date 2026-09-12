@@ -16,7 +16,6 @@
 #include <QPushButton>
 #include <QMessageBox>
 #include <QEvent>
-#include <QFontMetrics>
 
 SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     : QDialog(parent)
@@ -27,7 +26,6 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
 
     setMinimumSize(460, 380);
 
-    // ── 适配器类型 ──
 #ifdef Q_OS_LINUX
     ui->adapterCombo->addItem("SocketCAN", static_cast<int>(CanAdapterType::SocketCAN));
 #else
@@ -42,35 +40,27 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     ui->adapterCombo->addItem(tr("MockCAN (虚拟调试)"), static_cast<int>(CanAdapterType::MockCan));
 #endif
 
-    // 切换适配器时只更新提示，不自动扫描（避免卡顿）
+    // 切换适配器只重置列表，不自动扫描（扫描可能阻塞）
     connect(ui->adapterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SessionConfigDialog::onAdapterChanged);
 
-    // 刷新按钮 — 动态宽度适配中英文
     ui->refreshBtn->setStyleSheet(
         "QPushButton { background-color: #607d8b; color: white; font-weight: bold; "
         "border-radius: 3px; padding: 4px 8px; }"
         "QPushButton:hover { background-color: #455a64; }");
-    ui->refreshBtn->setMinimumWidth(0);
-    ui->refreshBtn->setMaximumWidth(16777215);
     connect(ui->refreshBtn, &QPushButton::clicked, this, &SessionConfigDialog::scanDevices);
 
-    // 波特率列表
     ui->baudCombo->addItems({"1M", "800K", "500K", "250K", "125K", "100K", "50K", "20K", "10K", "5K"});
     ui->baudCombo->setCurrentText("500K");
 
-    // CAN-FD 复选框
     connect(ui->canFdChk, &QCheckBox::toggled, this, &SessionConfigDialog::onCanFdToggled);
 
-    // CAN-FD 数据域波特率
     ui->dataBaudCombo->addItems({"2M", "4M", "5M", "8M", "10M"});
     ui->dataBaudCombo->setCurrentText("2M");
     ui->fdGroup->setVisible(false);
 
-    // ── 状态标签 ──
     ui->statusLabel->setStyleSheet("color: #7f8c8d; font-size: 12px;");
 
-    // ── 按钮 ──
     ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("创建会话"));
     ui->buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(
         "QPushButton { background-color: #3498db; color: white; font-weight: bold; "
@@ -92,7 +82,6 @@ SessionConfigDialog::SessionConfigDialog(QWidget *parent)
     });
     connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    // ── 初始状态显示提示 ──
     onAdapterChanged();
 }
 
@@ -175,13 +164,9 @@ void SessionConfigDialog::scanDevices()
         }
     } else {
         for (const auto &dev : devices) {
-            // PCAN 每个通道作为独立设备条目，需要显示通道/状态信息
-            // 其他适配器的设备名本身已包含标识信息
-            if (adapterType == static_cast<int>(CanAdapterType::PCAN)) {
-                ui->deviceCombo->addItem(dev.description, dev.channel);
-            } else {
-                ui->deviceCombo->addItem(dev.name, dev.channel);
-            }
+            // PCAN 每个通道单独成条，description 里含通道状态；其余适配器 name 已足够
+            ui->deviceCombo->addItem(adapterType == static_cast<int>(CanAdapterType::PCAN)
+                                     ? dev.description : dev.name, dev.channel);
         }
         ui->statusLabel->setText(tr("✓ 检测到 %1 个设备").arg(devices.size()));
         if (adapterType == static_cast<int>(CanAdapterType::ZCAN)
@@ -193,7 +178,6 @@ void SessionConfigDialog::scanDevices()
     int idx = ui->deviceCombo->findText(current, Qt::MatchStartsWith);
     if (idx >= 0) ui->deviceCombo->setCurrentIndex(idx);
 
-    // 有设备时自动启用 OK 按钮
     if (auto *btn = ui->buttonBox->button(QDialogButtonBox::Ok))
         btn->setEnabled(ui->deviceCombo->currentData().toInt() >= 0);
 }
@@ -214,17 +198,18 @@ void SessionConfigDialog::changeEvent(QEvent *event)
 {
     if (event->type() == QEvent::LanguageChange) {
         ui->retranslateUi(this);
-        // 重新设置程序化文本
         ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("创建会话"));
         ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("取消"));
-        // 刷新适配器列表和状态（不触发扫描）
+        // retranslateUi 会把标签复位为 .ui 文本，需按当前 FD 状态重建
+        ui->baudLabel->setText(ui->canFdChk->isChecked() ? tr("仲裁域波特率:")
+                                                        : tr("波特率:"));
         onAdapterChanged();
     }
     QDialog::changeEvent(event);
 }
 
 bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCanFd,
-                                    CanBaudRate &dataBaud, int &adapterType, QString &deviceName)
+                                    QString &dataBaudText, int &adapterType, QString &deviceName)
 {
     if (exec() != QDialog::Accepted)
         return false;
@@ -232,19 +217,9 @@ bool SessionConfigDialog::configure(int &channel, CanBaudRate &baud, bool &isCan
     adapterType = ui->adapterCombo->currentData().toInt();
     channel = ui->deviceCombo->currentData().toInt();
     deviceName = ui->deviceCombo->currentText().section("  [", 0, 0).trimmed();
-
     baud = baudRateFromString(ui->baudCombo->currentText());
-
     isCanFd = ui->canFdChk->isChecked();
+    dataBaudText = isCanFd ? ui->dataBaudCombo->currentText() : QString();
 
-    // CAN-FD 数据域波特率
-    if (isCanFd) {
-        QString dBaudStr = ui->dataBaudCombo->currentText();
-        if (dBaudStr == "2M")      dataBaud = CanBaudRate::BR_1M;    // 暂用1M值占位
-        else if (dBaudStr == "4M") dataBaud = CanBaudRate::BR_800K;
-        else if (dBaudStr == "5M") dataBaud = CanBaudRate::BR_500K;
-        else if (dBaudStr == "8M") dataBaud = CanBaudRate::BR_250K;
-        else                       dataBaud = CanBaudRate::BR_1M;
-    }
     return true;
 }

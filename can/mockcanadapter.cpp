@@ -1,10 +1,6 @@
 #include "mockcanadapter.h"
 #include <QDateTime>
 
-// ═══════════════════════════════════════════════════════════════
-// 构造 / 析构
-// ═══════════════════════════════════════════════════════════════
-
 MockCanAdapter::MockCanAdapter(QObject *parent)
     : CanInterface(parent)
 {
@@ -18,15 +14,10 @@ MockCanAdapter::~MockCanAdapter()
     close();
 }
 
-// ═══════════════════════════════════════════════════════════════
-// 设备扫描
-// ═══════════════════════════════════════════════════════════════
-
 QList<CanDeviceInfo> MockCanAdapter::scanDevices()
 {
     QList<CanDeviceInfo> devices;
 
-    // 模拟 2 个虚拟通道
     for (int i = 0; i < 2; ++i) {
         CanDeviceInfo info;
         info.name        = tr("MockCAN #%1").arg(i);
@@ -39,21 +30,15 @@ QList<CanDeviceInfo> MockCanAdapter::scanDevices()
     return devices;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// 打开 / 关闭
-// ═══════════════════════════════════════════════════════════════
-
-bool MockCanAdapter::open(int channel, CanBaudRate /*baud*/)
+bool MockCanAdapter::open(int /*channel*/, CanBaudRate /*baud*/)
 {
     if (m_opened)
         close();
 
-    m_channel = channel;
     m_opened  = true;
     m_msgCounter = 0;
 
-    // 默认每秒发送 3 条随机报文
-    if (m_rxTimer->interval() == 0)
+    if (m_rxTimer->interval() <= 0)
         m_rxTimer->start(333);
     else
         m_rxTimer->start();
@@ -65,7 +50,6 @@ void MockCanAdapter::close()
 {
     m_rxTimer->stop();
     m_opened = false;
-    m_channel = 0;
 }
 
 bool MockCanAdapter::isOpen() const
@@ -75,37 +59,13 @@ bool MockCanAdapter::isOpen() const
 
 bool MockCanAdapter::isAlive() const
 {
-    return m_opened; // 虚拟设备永远存活
+    return m_opened;
 }
-
-// ═══════════════════════════════════════════════════════════════
-// 发送
-// ═══════════════════════════════════════════════════════════════
 
 bool MockCanAdapter::sendMessage(const CanMessage &msg)
 {
-    if (!m_opened)
-        return false;
-
-    // 模拟偶尔发送失败 (约 5% 概率)
-    if (m_simulateError && QRandomGenerator::global()->bounded(100) < 5)
-        return false;
-
     Q_UNUSED(msg);
-    return true;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 自动接收
-// ═══════════════════════════════════════════════════════════════
-
-void MockCanAdapter::setAutoRxInterval(int ms)
-{
-    if (ms <= 0) {
-        m_rxTimer->stop();
-    } else {
-        m_rxTimer->start(ms);
-    }
+    return m_opened;
 }
 
 void MockCanAdapter::onRxTick()
@@ -113,12 +73,8 @@ void MockCanAdapter::onRxTick()
     if (!m_opened)
         return;
 
-    // 同时在两个通道上生成随机数据
-    CanMessage msg0 = generateRandomMessage(0);
-    emit messageReceived(msg0);
-
-    CanMessage msg1 = generateRandomMessage(1);
-    emit messageReceived(msg1);
+    emit messageReceived(generateRandomMessage(0));
+    emit messageReceived(generateRandomMessage(1));
 }
 
 CanMessage MockCanAdapter::generateRandomMessage(int channel)
@@ -131,9 +87,7 @@ CanMessage MockCanAdapter::generateRandomMessage(int channel)
     msg.channel   = channel;
     msg.isFd      = false;
 
-    // 随机 ID (11-bit 或 29-bit)
-    if (rng->bounded(10) < 2) {
-        // 20% 概率生成扩展帧
+    if (rng->bounded(10) < 2) { // 20% 扩展帧
         msg.id   = rng->bounded(0x1FFFFFFF);
         msg.type = CanFrameType::ExtendedData;
     } else {
@@ -141,20 +95,15 @@ CanMessage MockCanAdapter::generateRandomMessage(int channel)
         msg.type = CanFrameType::StandardData;
     }
 
-    // 随机 DLC (0~8)
     msg.dlc = static_cast<uint8_t>(rng->bounded(1, 9));
-
-    // 随机数据
-    for (int i = 0; i < msg.dlc; ++i) {
+    for (int i = 0; i < msg.dlc; ++i)
         msg.data[i] = static_cast<uint8_t>(rng->bounded(256));
-    }
 
-    // 每隔几条使数据有规律递增，便于观察
+    // 每隔几条输出一帧固定 ID 的递增数据，便于观察
     if (m_msgCounter % 5 == 0) {
         msg.id = 0x123;
         msg.type = CanFrameType::StandardData;
         msg.dlc = 8;
-        msg.isFd = false;
         for (int i = 0; i < 8; ++i)
             msg.data[i] = static_cast<uint8_t>((m_msgCounter + i) & 0xFF);
     }
@@ -165,7 +114,6 @@ CanMessage MockCanAdapter::generateRandomMessage(int channel)
 
 QList<int> MockCanAdapter::availableSendChannels() const
 {
-    // 两个通道都可用于发送
     QList<int> channels;
     if (m_opened)
         channels << 0 << 1;

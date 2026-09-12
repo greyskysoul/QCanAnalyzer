@@ -7,8 +7,7 @@
 #include <QTimer>
 
 /// ZCANFD 适配器 (ZLG USBCANFD 系列设备)
-/// Windows: 动态加载 ControlCANFD.dll
-/// Linux:   静态链接 libcontrolcanfd.a
+/// 直接调用 ControlCANFD 静态 API (Windows 导入库 / Linux libControlCANFD.a)
 class ZcanFdAdapter : public CanInterface
 {
     Q_OBJECT
@@ -34,31 +33,26 @@ public:
 private:
     void onReadTimer();
     void pollMessages();
-    QString errorText(UINT err);
     UINT baudToHz(CanBaudRate baud) const;
 
-    // ─── 设备句柄 ───
     DEVICE_HANDLE   m_devHandle = nullptr;
     UINT            m_deviceType = USBCANFD_200U;
     UINT            m_deviceIndex = 0;
     UINT            m_canIndex = 0;
     int             m_totalChannels = 1;
     bool            m_opened = false;
-    bool            m_isFdSupported = true;
 
     struct ChannelInfo {
         CHANNEL_HANDLE handle = nullptr;
         UINT chIdx = 0;
-        CanBaudRate baud = CanBaudRate::BR_500K;
     };
     QList<ChannelInfo> m_openChannels;
 
-    // ─── 读取轮询 ───
     QTimer *m_readTimer = nullptr;
 
-    // 静态缓存: 打开后禁止扫描 (扫描会 OpenDevice 已占用的设备, 导致发送失败)
+    // 重新扫描会对已占用设备调 ZCAN_OpenDevice 导致发送失败，故占用期间禁用扫描
     static int s_openCount;
-    static QSet<UINT> s_openDeviceIndices;  // 已打开的设备索引集合, 防止重复打开
+    static QSet<UINT> s_openDeviceIndices;
     static QList<CanDeviceInfo> s_cachedDevices;
 };
 

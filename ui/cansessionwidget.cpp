@@ -25,6 +25,28 @@
 #include <QFont>
 #include "qhexedit.h"
 
+namespace {
+
+QString buttonStyle(const char *background, const char *hover)
+{
+    return QStringLiteral(
+        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px;"
+        " background-color: %1; color: white; }"
+        "QPushButton:hover { background-color: %2; }")
+        .arg(QString::fromLatin1(background), QString::fromLatin1(hover));
+}
+
+const char *const kGreen      = "#4CAF50";
+const char *const kGreenHover = "#45a049";
+const char *const kRed        = "#f44336";
+const char *const kRedHover   = "#d32f2f";
+const char *const kBlue       = "#2196F3";
+const char *const kBlueHover  = "#0b7dda";
+const char *const kGray       = "#607d8b";
+const char *const kGrayHover  = "#455a64";
+
+} // namespace
+
 CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::CanSessionWidget)
@@ -55,13 +77,11 @@ CanSessionWidget::CanSessionWidget(int sessionId, QWidget *parent)
 
 CanSessionWidget::~CanSessionWidget()
 {
-    // 析构时直接清理资源，不调用 disconnectDevice()
-    // 因为 disconnectDevice() 会访问 UI 控件，而此时 UI 可能已部分销毁
+    // 不调 disconnectDevice(): 它会访问 UI 控件，而此处 UI 可能已部分销毁
     m_statusTimer->stop();
     m_frameTimer->stop();
-    if (m_can) {
+    if (m_can)
         m_can->close();
-    }
     delete ui;
 }
 
@@ -83,16 +103,6 @@ void CanSessionWidget::setupUi()
 {
     qreal scale = QApplication::primaryScreen()->devicePixelRatio();
 
-    const QString btnStyle = QStringLiteral(
-        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; }");
-    const QString greenBtn = btnStyle +
-        "QPushButton { background-color: #4CAF50; color: white; }"
-        "QPushButton:hover { background-color: #45a049; }";
-    const QString grayBtn = btnStyle +
-        "QPushButton { background-color: #607d8b; color: white; }"
-        "QPushButton:hover { background-color: #455a64; }";
-
-    // ─── 连接控制栏 ───
     ui->deviceLabel->setStyleSheet("font-weight:bold; color:#2c3e50;");
     ui->deviceLabel->setMinimumWidth(qRound(120 * scale));
 
@@ -105,13 +115,12 @@ void CanSessionWidget::setupUi()
     ui->dataBaudCombo->setVisible(false);
 
     ui->connectBtn->setFixedWidth(qRound(70 * scale));
-    ui->connectBtn->setStyleSheet(greenBtn);
+    ui->connectBtn->setStyleSheet(buttonStyle(kGreen, kGreenHover));
     connect(ui->connectBtn, &QPushButton::clicked, this, &CanSessionWidget::onConnectClicked);
 
     ui->statusLabel->setStyleSheet("color:gray; font-weight:bold;");
     ui->statusLabel->setMinimumWidth(qRound(120 * scale));
 
-    // ─── 接收表格 ───
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColTime, QHeaderView::Fixed);
     ui->rxTable->horizontalHeader()->resizeSection(ColTime, 100);
     ui->rxTable->horizontalHeader()->setSectionResizeMode(ColDir, QHeaderView::Fixed);
@@ -128,16 +137,14 @@ void CanSessionWidget::setupUi()
     ui->rxTable->horizontalHeader()->setStretchLastSection(false);
     ui->rxTable->verticalHeader()->setDefaultSectionSize(24);
 
-    // ─── 接收状态栏 ───
     ui->saveBtn->setFixedWidth(qRound(55 * scale));
-    ui->saveBtn->setStyleSheet(grayBtn);
+    ui->saveBtn->setStyleSheet(buttonStyle(kGray, kGrayHover));
     connect(ui->saveBtn, &QPushButton::clicked, this, &CanSessionWidget::onSaveClicked);
 
     ui->clearBtn->setFixedWidth(qRound(55 * scale));
-    ui->clearBtn->setStyleSheet(grayBtn);
+    ui->clearBtn->setStyleSheet(buttonStyle(kGray, kGrayHover));
     connect(ui->clearBtn, &QPushButton::clicked, this, &CanSessionWidget::onClearClicked);
 
-    // ─── 发送面板 ───
     ui->sendIdEdit->setMaximumWidth(qRound(100 * scale));
     ui->sendTypeCombo->addItem(tr("标准数据帧"));
     ui->sendTypeCombo->addItem(tr("扩展数据帧"));
@@ -146,7 +153,7 @@ void CanSessionWidget::setupUi()
     ui->sendDlcSpin->setValue(8);
     ui->sendDlcSpin->setFixedWidth(qRound(55 * scale));
 
-    // 数据输入 — QHexEdit 放在最下面，方便输入 CAN FD 数据
+    // 用 QHexEdit 替换 .ui 中的占位控件
     m_sendDataEdit = new QHexEdit(this);
     m_sendDataEdit->setOverwriteMode(true);
     m_sendDataEdit->setReadOnly(false);
@@ -155,61 +162,46 @@ void CanSessionWidget::setupUi()
     m_sendDataEdit->setAsciiArea(true);
     m_sendDataEdit->setBytesPerLine(8);
     m_sendDataEdit->setHexCaps(true);
-    if(scale > 1.0f)
+    if (scale > 1.0f)
         m_sendDataEdit->setFixedWidth(qRound(155 * scale));
     else
         m_sendDataEdit->setFixedWidth(305);
-    // 用默认值 8 字节初始化
-    QByteArray initData(8, '\0');
-    m_sendDataEdit->setData(initData);
-    // 替换 UI 中 placeholder 为 QHexEdit
+    m_sendDataEdit->setData(QByteArray(8, '\0'));
     ui->txDataLayout->removeWidget(ui->sendDataEditHolder);
     ui->sendDataEditHolder->hide();
     ui->txDataLayout->insertWidget(1, m_sendDataEdit);
 
-    // 连接 DLC 变化 → 自动调整 QHexEdit 数据大小
     connect(ui->sendDlcSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &CanSessionWidget::onSendDlcChanged);
 
-    // 发送通道选择器
     ui->sendChanCombo->setFixedWidth(qRound(60 * scale));
     connect(ui->sendChanCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CanSessionWidget::onSendChannelChanged);
 
-    // 帧间隔 SpinBox：0 = 最快速，>0 = 每帧间隔 N ms
+    // 0 = 最快 (1ms 定时器)，>0 = 每帧间隔 N ms
     ui->sendPeriodSpin->setRange(0, 10000);
     ui->sendPeriodSpin->setValue(0);
     ui->sendPeriodSpin->setSpecialValueText(tr("最快"));
     ui->sendPeriodSpin->setSuffix(tr(" ms"));
 
-    // 帧数 SpinBox
     ui->sendFrameCountSpin->setMinimum(1);
     ui->sendFrameCountSpin->setMaximum(999999);
     ui->sendFrameCountSpin->setValue(1);
     ui->sendFrameCountSpin->setFixedWidth(qRound(70 * scale));
 
     ui->sendBtn->setFixedWidth(qRound(80 * scale));
-    const QString blueBtn = btnStyle +
-        "QPushButton { background-color: #2196F3; color: white; }"
-        "QPushButton:hover { background-color: #0b7dda; }";
-    ui->sendBtn->setStyleSheet(blueBtn);
+    ui->sendBtn->setStyleSheet(buttonStyle(kBlue, kBlueHover));
     connect(ui->sendBtn, &QPushButton::clicked, this, &CanSessionWidget::onSendClicked);
 
-    // 分割器比例
     ui->splitter->setStretchFactor(0, 3);
     ui->splitter->setStretchFactor(1, 1);
 
-    // ─── 软过滤器 ───
     connect(ui->filterIdEdit, &QLineEdit::textChanged,
             this, &CanSessionWidget::onFilterChanged);
     connect(ui->filterPassChk, &QCheckBox::toggled,
             this, &CanSessionWidget::onFilterChanged);
-    onFilterChanged(); // 初始状态
+    onFilterChanged();
 }
-
-// ═══════════════════════════════════════════════════════════════
-// 连接 / 断开
-// ═══════════════════════════════════════════════════════════════
 
 void CanSessionWidget::connectDevice(int channel, CanBaudRate baud, int adapterType)
 {
@@ -304,11 +296,6 @@ bool CanSessionWidget::isConnected() const
     return m_can && m_can->isOpen();
 }
 
-void CanSessionWidget::refreshDevices()
-{
-    updateChannelCheckboxes();
-}
-
 void CanSessionWidget::refreshSendChannelCombo()
 {
     ui->sendChanCombo->blockSignals(true);
@@ -329,7 +316,6 @@ void CanSessionWidget::refreshSendChannelCombo()
             ui->sendChanCombo->setCurrentIndex(ui->sendChanCombo->count() - 1);
     }
 
-    // 多于1个通道时启用选择器
     ui->sendChanCombo->setEnabled(channels.size() > 1);
     ui->sendChanCombo->blockSignals(false);
 }
@@ -341,10 +327,6 @@ void CanSessionWidget::onSendChannelChanged(int index)
     m_can->setSendChannel(ch);
     m_channelIndex = ch;
 }
-
-// ═══════════════════════════════════════════════════════════════
-// 状态监控
-// ═══════════════════════════════════════════════════════════════
 
 void CanSessionWidget::onStatusCheck()
 {
@@ -362,37 +344,23 @@ void CanSessionWidget::onStatusCheck()
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// UI 状态切换 & 通道复选框
-// ═══════════════════════════════════════════════════════════════
-
 void CanSessionWidget::updateUiState(bool connected)
 {
-    const QString greenBtn =
-        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; "
-        "background-color: #4CAF50; color: white; }"
-        "QPushButton:hover { background-color: #45a049; }";
-    const QString redBtn =
-        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; "
-        "background-color: #f44336; color: white; }"
-        "QPushButton:hover { background-color: #d32f2f; }";
-
     if (connected) {
         ui->statusLabel->setText(tr("● 已连接"));
         ui->statusLabel->setToolTip("");
         ui->statusLabel->setStyleSheet("color:green; font-weight:bold;");
         ui->connectBtn->setText(tr("断开"));
-        ui->connectBtn->setStyleSheet(redBtn);
+        ui->connectBtn->setStyleSheet(buttonStyle(kRed, kRedHover));
         ui->baudCombo->setEnabled(false);
         ui->dataBaudCombo->setEnabled(false);
-        // 通道选择器在连接后可切换
         ui->sendChanCombo->setEnabled(m_can && m_can->availableSendChannels().size() > 1);
     } else {
         ui->statusLabel->setText(tr("未连接"));
         ui->statusLabel->setToolTip("");
         ui->statusLabel->setStyleSheet("color:gray; font-weight:bold;");
         ui->connectBtn->setText(tr("连接"));
-        ui->connectBtn->setStyleSheet(greenBtn);
+        ui->connectBtn->setStyleSheet(buttonStyle(kGreen, kGreenHover));
         ui->baudCombo->setEnabled(true);
         ui->dataBaudCombo->setEnabled(true);
         ui->sendChanCombo->clear();
@@ -423,10 +391,6 @@ void CanSessionWidget::updateChannelCheckboxes()
     ui->channelChkLayout->addStretch();
 }
 
-// ═══════════════════════════════════════════════════════════════
-// 槽
-// ═══════════════════════════════════════════════════════════════
-
 void CanSessionWidget::onConnectClicked()
 {
     if (m_can->isOpen()) {
@@ -445,7 +409,6 @@ void CanSessionWidget::onSendClicked()
 {
     if (!m_can->isOpen()) return;
 
-    // ── 如果正在发送 → 停止 ──
     if (m_sending) {
         stopSending();
         return;
@@ -458,17 +421,15 @@ void CanSessionWidget::prepareAndStartSend()
 {
     if (!m_can->isOpen()) return;
 
-    // 从 QHexEdit 读取原始二进制数据
     QByteArray rawData = m_sendDataEdit->data();
     int dataLen = qMin(rawData.size(), 64);
 
-    // 清除 QHexEdit 的 modified 标记 (高亮)
+    // setData 会清除 QHexEdit 的 modified 高亮
     m_sendDataEdit->setData(rawData);
 
     m_pendingMsg = CanMessage();
     m_pendingMsg.direction = CanDirection::Tx;
-    // 使用当前选中的发送通道
-    if (m_can && m_can->currentSendChannel() >= 0)
+    if (m_can->currentSendChannel() >= 0)
         m_pendingMsg.channel = m_can->currentSendChannel();
     else
         m_pendingMsg.channel = m_channelIndex;
@@ -479,35 +440,31 @@ void CanSessionWidget::prepareAndStartSend()
         m_pendingMsg.id = idText.mid(2).toUInt(&ok, 16);
     else
         m_pendingMsg.id = idText.toUInt(&ok, 16);
-    if (!ok) { m_pendingMsg.id = 0x123; }
+    if (!ok) m_pendingMsg.id = 0x123;
 
     int typeIdx = ui->sendTypeCombo->currentIndex();
     if (typeIdx == 0) m_pendingMsg.type = CanFrameType::StandardData;
     else if (typeIdx == 1) m_pendingMsg.type = CanFrameType::ExtendedData;
     else m_pendingMsg.type = CanFrameType::Remote;
 
-    // DLC 受 CAN-FD 限制
     int maxDlc = m_isCanFd ? 64 : 8;
     m_pendingMsg.dlc = static_cast<uint8_t>(qMin(qMax(dataLen, ui->sendDlcSpin->value()), maxDlc));
     m_pendingMsg.isFd = m_isCanFd && (m_pendingMsg.dlc > 8);
+    // CAN FD 只允许 0~8/12/16/20/24/32/48/64 这些长度
+    if (m_pendingMsg.isFd)
+        m_pendingMsg.dlc = static_cast<uint8_t>(canFdSnapLen(m_pendingMsg.dlc));
 
-    for (int i = 0; i < dataLen; ++i) {
+    for (int i = 0; i < dataLen; ++i)
         m_pendingMsg.data[i] = static_cast<uint8_t>(rawData[i]);
-    }
 
-    // 设置发送状态
     m_frameRemaining = ui->sendFrameCountSpin->value();
     m_sending = true;
 
-    // 帧间隔：0 用 1ms 快速发送，>0 用指定间隔
-    int intervalMs = ui->sendPeriodSpin->value();
-    if (intervalMs <= 0) intervalMs = 1;
+    int intervalMs = qMax(ui->sendPeriodSpin->value(), 1);
 
-    // 帧数 > 1 或帧间隔 > 1 时显示"停止"按钮（仅单帧最快发送不切换）
-    bool multiFrame = (m_frameRemaining > 1 || intervalMs > 1);
-    if (multiFrame) {
+    // 单帧 + 最快模式不必切换成“停止”，避免按钮一闪而过
+    if (m_frameRemaining > 1 || intervalMs > 1)
         updateSendButtonState(true);
-    }
 
     m_frameTimer->start(intervalMs);
 }
@@ -526,64 +483,40 @@ void CanSessionWidget::onSendOneFrame()
         addMessageToTable(m_pendingMsg);
     }
 
-    m_frameRemaining--;
-
-    if (m_frameRemaining <= 0) {
+    if (--m_frameRemaining <= 0)
         stopSending();
-    }
 }
 
 void CanSessionWidget::stopSending()
 {
     m_frameTimer->stop();
-    bool hadMultiFrame = (m_frameRemaining > 1 || ui->sendPeriodSpin->value() > 0);
     m_sending = false;
     m_frameRemaining = 0;
-    // 仅当之前更新过 UI 时才恢复
-    if (hadMultiFrame) {
+
+    if (m_sendUiActive)
         updateSendButtonState(false);
-    }
 }
 
 void CanSessionWidget::updateSendButtonState(bool sending)
 {
-    const qreal scale = QApplication::primaryScreen()->devicePixelRatio();
-    const QString btnStyle = QStringLiteral(
-        "QPushButton { font-weight: bold; border-radius: 3px; padding: 4px 10px; }");
+    m_sendUiActive = sending;
 
-    if (sending) {
-        const QString redBtn = btnStyle +
-            "QPushButton { background-color: #f44336; color: white; }"
-            "QPushButton:hover { background-color: #d32f2f; }";
-        ui->sendBtn->setText(tr("停止"));
-        ui->sendBtn->setStyleSheet(redBtn);
-        ui->sendBtn->setFixedWidth(qRound(80 * scale));
-        // 发送期间禁用参数编辑
-        ui->sendIdEdit->setEnabled(false);
-        ui->sendTypeCombo->setEnabled(false);
-        ui->sendDlcSpin->setEnabled(false);
-        m_sendDataEdit->setEnabled(false);
-        ui->sendFrameCountSpin->setEnabled(false);
-        ui->sendPeriodSpin->setEnabled(false);
-        ui->sendChanCombo->setEnabled(false);
-    } else {
-        const QString blueBtn = btnStyle +
-            "QPushButton { background-color: #2196F3; color: white; }"
-            "QPushButton:hover { background-color: #0b7dda; }";
-        ui->sendBtn->setText(tr("发送"));
-        ui->sendBtn->setStyleSheet(blueBtn);
-        ui->sendBtn->setFixedWidth(qRound(80 * scale));
-        // 恢复参数编辑
-        ui->sendIdEdit->setEnabled(true);
-        ui->sendTypeCombo->setEnabled(true);
-        ui->sendDlcSpin->setEnabled(true);
-        m_sendDataEdit->setEnabled(true);
-        ui->sendFrameCountSpin->setEnabled(true);
-        ui->sendPeriodSpin->setEnabled(true);
-        // 多通道时恢复通道选择
-        bool multiCh = m_can && m_can->availableSendChannels().size() > 1;
-        ui->sendChanCombo->setEnabled(multiCh);
-    }
+    const qreal scale = QApplication::primaryScreen()->devicePixelRatio();
+
+    ui->sendBtn->setText(sending ? tr("停止") : tr("发送"));
+    ui->sendBtn->setStyleSheet(sending ? buttonStyle(kRed, kRedHover)
+                                       : buttonStyle(kBlue, kBlueHover));
+    ui->sendBtn->setFixedWidth(qRound(80 * scale));
+
+    const bool editable = !sending;
+    ui->sendIdEdit->setEnabled(editable);
+    ui->sendTypeCombo->setEnabled(editable);
+    ui->sendDlcSpin->setEnabled(editable);
+    m_sendDataEdit->setEnabled(editable);
+    ui->sendFrameCountSpin->setEnabled(editable);
+    ui->sendPeriodSpin->setEnabled(editable);
+    ui->sendChanCombo->setEnabled(editable && m_can
+                                  && m_can->availableSendChannels().size() > 1);
 }
 
 void CanSessionWidget::changeEvent(QEvent *event)
@@ -597,7 +530,7 @@ void CanSessionWidget::changeEvent(QEvent *event)
 
 void CanSessionWidget::retranslateDynamicUi()
 {
-    // 重新填充帧类型下拉框
+    // retranslateUi 会清空代码填充的下拉框内容，需要重建
     int typeIdx = ui->sendTypeCombo->currentIndex();
     ui->sendTypeCombo->clear();
     ui->sendTypeCombo->addItem(tr("标准数据帧"));
@@ -605,11 +538,10 @@ void CanSessionWidget::retranslateDynamicUi()
     ui->sendTypeCombo->addItem(tr("远程帧"));
     ui->sendTypeCombo->setCurrentIndex(typeIdx);
 
-    // 帧间隔 SpinBox
     ui->sendPeriodSpin->setSpecialValueText(tr("最快"));
     ui->sendPeriodSpin->setSuffix(tr(" ms"));
 
-    // 恢复设备名 (retranslateUi 会重置为 .ui 中的 "—")
+    // 设备名（retranslateUi 会重置为 .ui 中的 “—”），以及 CAN-FD 时的波特率标签
 #ifdef Q_OS_LINUX
     if (m_adapterType == static_cast<int>(CanAdapterType::SocketCAN))
         ui->deviceLabel->setText(tr("SocketCAN (请用 ip link 命令设置波特率)"));
@@ -619,10 +551,11 @@ void CanSessionWidget::retranslateDynamicUi()
     if (m_can)
         ui->deviceLabel->setText(m_can->adapterName());
 #endif
+    if (m_isCanFd)
+        ui->connBaudPrefixLabel->setText(tr("仲裁域:"));
 
-    // 刷新动态状态文本
     updateUiState(m_can && m_can->isOpen());
-    updateSendButtonState(m_sending);
+    updateSendButtonState(m_sendUiActive);
 }
 
 void CanSessionWidget::onClearClicked()
@@ -652,7 +585,7 @@ void CanSessionWidget::onSaveClicked()
     out.setCodec("UTF-8");
     out << QChar(0xFEFF);
 
-    out << "时间,方向,ID,通道,类型,DLC,数据\n";
+    out << tr("时间,方向,ID,通道,类型,DLC,数据") << "\n";
 
     for (int row = 0; row < ui->rxTable->rowCount(); ++row) {
         for (int col = 0; col < ui->rxTable->columnCount(); ++col) {
@@ -673,10 +606,6 @@ void CanSessionWidget::onSaveClicked()
 }
 
 // ─── 接收消息 ─────────────────────────────────────────────────
-
-// ═══════════════════════════════════════════════════════════════
-// 软过滤器
-// ═══════════════════════════════════════════════════════════════
 
 void CanSessionWidget::onFilterChanged()
 {
@@ -699,45 +628,33 @@ void CanSessionWidget::onFilterChanged()
         return;
     }
 
-    // 解析过滤表达式: 默认十六进制，逗号分隔
-    //   123       → 精确匹配 0x123
-    //   123-FFF   → ID-Mask: 匹配 (can_id & 0xFFF) == 0x123
-    //   123-FF0   → ID-Mask: 匹配高12位=0x123, 低4位任意
+    // 默认十六进制，逗号分隔；支持 ID 精确匹配与 ID-Mask 两种写法：
+    //   123     → (id & 0xFFFFFFFF) == 0x123
+    //   123-FF0 → (id & 0xFF0) == (0x123 & 0xFF0)
     const QStringList parts = text.split(',', Qt::SkipEmptyParts);
     bool parseOk = true;
     for (const QString &part : parts) {
         QString s = part.trimmed().toUpper();
         if (s.isEmpty()) continue;
 
+        uint32_t mask = 0xFFFFFFFF;
+        QString idPart = s;
         int dashIdx = s.indexOf('-');
         if (dashIdx > 0) {
-            // ── ID-Mask 格式 ──
-            QString sId = s.left(dashIdx).trimmed();
-            QString sMask = s.mid(dashIdx + 1).trimmed();
-            bool okId, okMask;
-            uint32_t id = sId.toUInt(&okId, 16);
-            uint32_t mask = sMask.toUInt(&okMask, 16);
-            if (okId && okMask) {
-                FilterEntry e;
-                e.id = id;
-                e.mask = mask;
-                m_filterEntries.append(e);
-            } else {
-                parseOk = false;
-            }
-        } else {
-            // ── 纯 ID 精确匹配 ──
-            bool ok;
-            uint32_t id = s.toUInt(&ok, 16);
-            if (ok) {
-                FilterEntry e;
-                e.id = id;
-                e.mask = 0xFFFFFFFF; // 精确匹配
-                m_filterEntries.append(e);
-            } else {
-                parseOk = false;
-            }
+            idPart = s.left(dashIdx).trimmed();
+            bool okMask = false;
+            mask = s.mid(dashIdx + 1).trimmed().toUInt(&okMask, 16);
+            if (!okMask) { parseOk = false; continue; }
         }
+
+        bool okId = false;
+        uint32_t id = idPart.toUInt(&okId, 16);
+        if (!okId) { parseOk = false; continue; }
+
+        FilterEntry e;
+        e.id = id;
+        e.mask = mask;
+        m_filterEntries.append(e);
     }
 
     if (m_filterEntries.isEmpty()) {
@@ -756,7 +673,6 @@ bool CanSessionWidget::passFilter(const CanMessage &msg) const
         return true;
 
     for (const FilterEntry &e : m_filterEntries) {
-        // id+mask 方式: (can_id & mask) == (entry.id & mask)
         if ((msg.id & e.mask) == (e.id & e.mask))
             return true;
     }
@@ -767,7 +683,7 @@ void CanSessionWidget::onMessageReceived(const CanMessage &msg)
 {
     if (!passFilter(msg)) return;
 
-    // 检查通道复选框：未使能的通道不显示
+    // 未使能的通道不显示
     for (const QCheckBox *chk : m_channelChks) {
         bool ok = false;
         int ch = chk->property("canChannel").toInt(&ok);
@@ -783,7 +699,7 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
 {
     int row = ui->rxTable->rowCount();
 
-    if (row >= m_maxTableRows) {
+    if (row >= kMaxTableRows) {
         ui->rxTable->removeRow(0);
         row--;
     }
@@ -821,7 +737,7 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
     auto *dataItem = new QTableWidgetItem(msg.dataHex());
     dataItem->setFont(QFont("Consolas", 9));
     if (msg.dlc > 8) {
-        // CAN FD 长数据: 每8字节一行
+        // CAN FD 长数据：每 8 字节换行
         QString text = msg.dataHex();
         QString wrapped;
         int byteCnt = 0;
@@ -839,7 +755,6 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
     }
     ui->rxTable->setItem(row, ColData, dataItem);
 
-    // 长数据时动态调整行高
     if (msg.dlc > 8) {
         int lines = (msg.dlc + 7) / 8;
         ui->rxTable->verticalHeader()->resizeSection(row, 18 * lines);
@@ -853,28 +768,15 @@ void CanSessionWidget::addMessageToTable(const CanMessage &msg)
 
 void CanSessionWidget::updateStats()
 {
-    ui->rxCountLabel->setText(QString("Rx: %1  |  Tx: %2").arg(m_rxCount).arg(m_txCount));
+    ui->rxCountLabel->setText(tr("Rx: %1  |  Tx: %2").arg(m_rxCount).arg(m_txCount));
 }
 
 void CanSessionWidget::setCanFdEnabled(bool enabled)
 {
     if (m_isCanFd == enabled)
         return;
-    // 直接设置状态并更新 UI
     ui->canFdChk->setChecked(enabled);
     onCanFdToggled(enabled);
-}
-
-CanBaudRate CanSessionWidget::dataBaudRate() const
-{
-    if (!m_isCanFd)
-        return CanBaudRate::BR_1M; // 非 FD 时无意义
-    return baudRateFromString(ui->dataBaudCombo->currentText());
-}
-
-CanBaudRate CanSessionWidget::arbBaudRate() const
-{
-    return baudRateFromString(ui->baudCombo->currentText());
 }
 
 void CanSessionWidget::setBaudRateText(const QString &text)
@@ -891,15 +793,12 @@ void CanSessionWidget::onSendDlcChanged(int dlc)
 {
     if (!m_sendDataEdit) return;
 
-    // 非 FD 模式限制 DLC ≤ 8
     if (!m_isCanFd && dlc > 8)
         dlc = 8;
 
-    // 调整 QHexEdit 的数据大小为 dlc 字节
     QByteArray current = m_sendDataEdit->data();
     if (current.size() != dlc) {
-        current.resize(dlc);
-        // 新扩展的字节填充 0x00
+        current.resize(dlc); // 新增字节为 0x00
         m_sendDataEdit->setData(current);
     }
 }
@@ -908,18 +807,10 @@ void CanSessionWidget::onCanFdToggled(bool checked)
 {
     m_isCanFd = checked;
 
-    // ── 波特朗/标签切换 ──
-    if (checked) {
-        ui->connBaudPrefixLabel->setText("仲裁域:");
-        ui->dataBaudLabel->setVisible(true);
-        ui->dataBaudCombo->setVisible(true);
-    } else {
-        ui->connBaudPrefixLabel->setText("波特率:");
-        ui->dataBaudLabel->setVisible(false);
-        ui->dataBaudCombo->setVisible(false);
-    }
+    ui->connBaudPrefixLabel->setText(checked ? tr("仲裁域:") : tr("波特率:"));
+    ui->dataBaudLabel->setVisible(checked);
+    ui->dataBaudCombo->setVisible(checked);
 
-    // ── DLC SpinBox 范围 ──
     ui->sendDlcSpin->blockSignals(true);
     if (checked) {
         ui->sendDlcSpin->setRange(0, 64);
@@ -931,12 +822,5 @@ void CanSessionWidget::onCanFdToggled(bool checked)
     }
     ui->sendDlcSpin->blockSignals(false);
 
-    // ── 更新 QHexEdit 数据大小 ──
     onSendDlcChanged(ui->sendDlcSpin->value());
-}
-
-void CanSessionWidget::updateHexEditSize()
-{
-    int dlc = ui->sendDlcSpin->value();
-    onSendDlcChanged(dlc);
 }

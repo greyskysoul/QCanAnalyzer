@@ -34,6 +34,7 @@ private:
     void hideWelcomePage();
     void initLanguage(const QString &lang);
     void switchLanguage(const QString &lang);
+    void tileDockAreas(Qt::Orientation orientation);
 
     Ui::MainWindow *ui;
     QStackedWidget *m_stack = nullptr;
@@ -41,15 +42,11 @@ private:
     CanManager *m_canManager = nullptr;
     WelcomeWidget *m_welcomeWidget = nullptr;
 
-    // ─── 翻译 ───
     QString      m_currentLang;
     QTranslator *m_appTranslator = nullptr;
     QTranslator *m_qtTranslator = nullptr;
-
-    // ─── 语言菜单 ───
     QActionGroup *m_langGroup = nullptr;
 
-    // ─── 需要动态更新的 UI 字符串 ───
-    QString m_statusReadyMsg;
+    QString m_statusReadyMsg; // 需随语言切换重新生成
 };
 #endif // MAINWINDOW_H

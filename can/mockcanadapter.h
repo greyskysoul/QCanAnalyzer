@@ -5,8 +5,7 @@
 #include <QTimer>
 #include <QRandomGenerator>
 
-/// 虚拟 CAN 适配器 —— 仅在 Debug 模式下使用，用于无硬件时测试 UI
-/// 支持模拟 CAN 报文收发，以及随机错误注入
+/// 虚拟 CAN 适配器 —— 仅在 Debug 模式下编译，用于无硬件时测试 UI
 class MockCanAdapter : public CanInterface
 {
     Q_OBJECT
@@ -24,24 +23,15 @@ public:
     QString adapterName() const override { return tr("MockCAN (虚拟)"); }
     QList<int> availableSendChannels() const override;
 
-    /// 设置随机接收报文的频率（毫秒），0=不自动接收
-    void setAutoRxInterval(int ms);
-
-    /// 设置是否模拟偶尔的发送失败
-    void setSimulateError(bool enable) { m_simulateError = enable; }
-
 private slots:
     void onRxTick();
 
 private:
-    /// 生成一条随机 CAN 报文
     CanMessage generateRandomMessage(int channel);
 
     bool      m_opened = false;
-    int       m_channel = 0;
     QTimer   *m_rxTimer = nullptr;
-    bool      m_simulateError = false;
-    uint32_t  m_msgCounter = 0;    // 报文计数器，用于生成变化的数据
+    uint32_t  m_msgCounter = 0; // 用于生成有规律变化的数据
 };
 
 #endif // MOCKCANADAPTER_H

@@ -1,10 +1,8 @@
 #include "pcanadapter.h"
 #include <QDebug>
+#include <QDateTime>
 #include <QTimer>
-#include <QCoreApplication>
 #include <QVector>
-
-// ─── 构造 / 析构 ──────────────────────────────────────────────
 
 PcanAdapter::PcanAdapter(QObject *parent)
     : CanInterface(parent)
@@ -23,16 +21,13 @@ PcanAdapter::~PcanAdapter()
     }
 }
 
-// ─── 动态加载 PCANBasic.dll ───────────────────────────────────
-
 bool PcanAdapter::loadLibrary()
 {
     if (m_loaded) return true;
 
-    // 不设 parent: 栈上对象析构顺序不确定可能导致问题
     m_library = new QLibrary("PCANBasic");
     if (!m_library->load()) {
-        qWarning() << "PCANBasic.dll 加载失败 (无PCAN驱动):" << m_library->errorString();
+        qWarning() << "PCANBasic.dll 加载失败 (未安装 PCAN 驱动):" << m_library->errorString();
         delete m_library;
         m_library = nullptr;
         return false;
@@ -40,13 +35,10 @@ bool PcanAdapter::loadLibrary()
 
     m_Initialize     = (CAN_Initialize_t)    m_library->resolve("CAN_Initialize");
     m_Uninitialize   = (CAN_Uninitialize_t)  m_library->resolve("CAN_Uninitialize");
-    m_Reset          = (CAN_Reset_t)         m_library->resolve("CAN_Reset");
     m_GetStatus      = (CAN_GetStatus_t)     m_library->resolve("CAN_GetStatus");
     m_Read           = (CAN_Read_t)          m_library->resolve("CAN_Read");
     m_Write          = (CAN_Write_t)         m_library->resolve("CAN_Write");
-    m_FilterMessages = (CAN_FilterMessages_t)m_library->resolve("CAN_FilterMessages");
     m_GetValue       = (CAN_GetValue_t)      m_library->resolve("CAN_GetValue");
-    m_SetValue       = (CAN_SetValue_t)      m_library->resolve("CAN_SetValue");
     m_GetErrorText   = (CAN_GetErrorText_t)  m_library->resolve("CAN_GetErrorText");
 
     if (!m_Initialize || !m_Uninitialize || !m_Read || !m_Write || !m_GetStatus) {
@@ -68,31 +60,24 @@ void PcanAdapter::unloadLibrary()
     }
     m_Initialize = nullptr;
     m_Uninitialize = nullptr;
-    m_Reset = nullptr;
     m_GetStatus = nullptr;
     m_Read = nullptr;
     m_Write = nullptr;
-    m_FilterMessages = nullptr;
     m_GetValue = nullptr;
-    m_SetValue = nullptr;
     m_GetErrorText = nullptr;
     m_loaded = false;
 }
-
-// ─── 扫描设备 ─────────────────────────────────────────────────
 
 QList<CanDeviceInfo> PcanAdapter::scanDevices()
 {
     QList<CanDeviceInfo> devices;
     if (!m_loaded || !m_GetValue) return devices;
 
-    // ═══ 方法1: 尝试新版 PCANBasic 4.x API (TPCANChannelInformation 数组) ═══
-    // PCAN_ATTACHED_CHANNELS_COUNT → PCAN_ATTACHED_CHANNELS
+    // 方式 1: PCANBasic 4.x 的 PCAN_ATTACHED_CHANNELS
     uint32_t channelCount = 0;
     uint32_t res = m_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS_COUNT,
                               &channelCount, sizeof(channelCount));
     if (res == PCAN_ERROR_OK && channelCount > 0 && channelCount <= 64) {
-        // PCANBasic 4.x: 返回 TPCANChannelInformation 数组
         QVector<TPCANChannelInformation> infoBuf(channelCount);
         res = m_GetValue(PCAN_NONEBUS, PCAN_ATTACHED_CHANNELS,
                          infoBuf.data(), channelCount * sizeof(TPCANChannelInformation));
@@ -104,6 +89,7 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
 
                 CanDeviceInfo info;
                 info.channel = ci.channel_handle;
+                info.adapterType = static_cast<int>(CanAdapterType::PCAN);
                 info.name = QString::fromLatin1(ci.device_name, MAX_LENGTH_HARDWARE_NAME).trimmed();
                 if (info.name.isEmpty())
                     info.name = channelName(ci.channel_handle);
@@ -122,7 +108,7 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
         }
     }
 
-    // ═══ 方法2: 逐通道查询 PCAN_CHANNEL_CONDITION（兼容所有版本） ═══
+    // 方式 2: 逐通道查询条件，兼容旧版 PCANBasic
     static const int allChannels[] = {
         PCAN_USBBUS1, PCAN_USBBUS2, PCAN_USBBUS3, PCAN_USBBUS4,
         PCAN_USBBUS5, PCAN_USBBUS6, PCAN_USBBUS7, PCAN_USBBUS8,
@@ -140,7 +126,6 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
         bool detected = false;
         QString condStr;
 
-        // 先尝试 PCAN_CHANNEL_CONDITION (无需初始化)
         res = m_GetValue(handle, PCAN_CHANNEL_CONDITION, &cond, sizeof(cond));
         if (res == PCAN_ERROR_OK) {
             if (cond == PCAN_CHANNEL_AVAILABLE || cond == PCAN_CHANNEL_PCANVIEW) {
@@ -152,7 +137,7 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
             }
         }
 
-        // 回退: 尝试 CAN_Initialize 检测硬件
+        // 旧版驱动可能不支持 PCAN_CHANNEL_CONDITION，回退到试初始化
         if (!detected) {
             res = m_Initialize(handle, PCAN_BAUD_500K, 0, 0, 0);
             if (res == PCAN_ERROR_OK) {
@@ -165,6 +150,7 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
         if (detected) {
             CanDeviceInfo info;
             info.channel = ch;
+            info.adapterType = static_cast<int>(CanAdapterType::PCAN);
             info.name = channelName(ch);
             info.description = QStringLiteral("%1 [%2]").arg(info.name).arg(condStr);
             devices.append(info);
@@ -173,8 +159,6 @@ QList<CanDeviceInfo> PcanAdapter::scanDevices()
 
     return devices;
 }
-
-// ─── 打开 / 关闭 ──────────────────────────────────────────────
 
 bool PcanAdapter::open(int channel, CanBaudRate baud)
 {
@@ -187,65 +171,51 @@ bool PcanAdapter::open(int channel, CanBaudRate baud)
         return false;
     }
 
-    // 设置读取超时
-    if (m_SetValue) {
-        uint32_t timeout = m_readTimeoutMs;
-        m_SetValue((TPCANHandle)channel, PCAN_RECEIVE_EVENT, &timeout, sizeof(timeout));
-    }
-
     m_channel = (uint16_t)channel;
     m_opened = true;
 
-    // 启动轮询定时器 (复用, 避免内存泄漏)
     if (!m_readTimer) {
         m_readTimer = new QTimer(this);
-        connect(m_readTimer, &QTimer::timeout, this, [this]() {
-            if (!m_opened || !m_Read) return;
-            TPCANMsg msg;
-            TPCANTimestamp ts;
-            uint32_t res;
-            while ((res = m_Read(m_channel, &msg, &ts)) == PCAN_ERROR_OK) {
-                CanMessage canMsg;
-                canMsg.id = msg.ID;
-                canMsg.dlc = msg.LEN;
-                canMsg.isFd = false; // PCAN Basic API 不支持 CAN FD
-                canMsg.direction = CanDirection::Rx;
-                canMsg.channel = m_channel & 0x0F;  // 逻辑通道号
-                canMsg.timestamp = QDateTime::currentDateTime(); // 使用本地时间
-
-                if (msg.MSGTYPE & PCAN_MESSAGE_EXTENDED)
-                    canMsg.type = CanFrameType::ExtendedData;
-                else if (msg.MSGTYPE & PCAN_MESSAGE_RTR)
-                    canMsg.type = CanFrameType::Remote;
-                else if (msg.MSGTYPE & PCAN_MESSAGE_STATUS)
-                    canMsg.type = CanFrameType::Status;
-                else
-                    canMsg.type = CanFrameType::StandardData;
-
-                for (int i = 0; i < 8 && i < (int)msg.LEN; ++i)
-                    canMsg.data[i] = msg.DATA[i];
-
-                emit messageReceived(canMsg);
-            }
-            if (res != PCAN_ERROR_OK && res != PCAN_ERROR_QRCVEMPTY) {
-                // 总线错误日志
-                if (res & PCAN_ERROR_BUSOFF) {
-                    qWarning() << "PCAN: Bus-Off detected on channel" << m_channel;
-                } else if (res & PCAN_ERROR_BUSHEAVY) {
-                    qWarning() << "PCAN: Bus-Heavy warning on channel" << m_channel;
-                } else if (res & PCAN_ERROR_BUSLIGHT) {
-                    // Bus-Light: 轻度总线负载警告，静默处理
-                }
-                if (res == PCAN_ERROR_OVERRUN) {
-                    qWarning() << "PCAN: Receive overrun on channel" << m_channel;
-                } else if (res == PCAN_ERROR_QOVERRUN) {
-                    qWarning() << "PCAN: Queue overrun on channel" << m_channel;
-                }
-            }
-        });
+        connect(m_readTimer, &QTimer::timeout, this, &PcanAdapter::onReadTimer);
     }
-    m_readTimer->start(1); // 1ms 轮询
+    m_readTimer->start(1);
     return true;
+}
+
+void PcanAdapter::onReadTimer()
+{
+    if (!m_opened || !m_Read) return;
+
+    TPCANMsg msg;
+    TPCANTimestamp ts;
+    uint32_t res;
+    while ((res = m_Read(m_channel, &msg, &ts)) == PCAN_ERROR_OK) {
+        CanMessage canMsg;
+        canMsg.id = msg.ID;
+        canMsg.dlc = msg.LEN;
+        canMsg.isFd = false; // PCAN Basic API 不支持 CAN FD
+        canMsg.direction = CanDirection::Rx;
+        canMsg.channel = m_channel & 0x0F; // 逻辑通道号
+        canMsg.timestamp = QDateTime::currentDateTime();
+
+        if (msg.MSGTYPE & PCAN_MESSAGE_EXTENDED)
+            canMsg.type = CanFrameType::ExtendedData;
+        else if (msg.MSGTYPE & PCAN_MESSAGE_RTR)
+            canMsg.type = CanFrameType::Remote;
+        else if (msg.MSGTYPE & PCAN_MESSAGE_STATUS)
+            canMsg.type = CanFrameType::Status;
+        else
+            canMsg.type = CanFrameType::StandardData;
+
+        for (int i = 0; i < 8 && i < (int)msg.LEN; ++i)
+            canMsg.data[i] = msg.DATA[i];
+
+        emit messageReceived(canMsg);
+    }
+
+    // PCAN_ERROR_QRCVEMPTY 表示队列已空，属正常退出条件
+    if (res != PCAN_ERROR_QRCVEMPTY)
+        qWarning() << "PCAN: 读取失败 ch" << m_channel << errorText(res);
 }
 
 void PcanAdapter::close()
@@ -267,14 +237,13 @@ bool PcanAdapter::isAlive() const
     if (!m_opened || !m_GetStatus) return false;
 
     uint32_t status = m_GetStatus(m_channel);
-    // 如果返回 ILLHANDLE 或 NODRIVER 说明设备已物理断开
+    // 句柄/驱动/硬件错误说明设备已物理断开；总线错误不影响存活判断
     if (status == PCAN_ERROR_ILLHANDLE ||
         status == PCAN_ERROR_NODRIVER ||
         status == PCAN_ERROR_ILLHW ||
         status == PCAN_ERROR_RESOURCE)
         return false;
 
-    // 总线错误不影响存活判断
     return true;
 }
 
@@ -285,8 +254,6 @@ QList<int> PcanAdapter::availableSendChannels() const
         channels.append(m_channel & 0x0F);
     return channels;
 }
-
-// ─── 发送 ─────────────────────────────────────────────────────
 
 bool PcanAdapter::sendMessage(const CanMessage &msg)
 {
@@ -313,13 +280,6 @@ bool PcanAdapter::sendMessage(const CanMessage &msg)
         return false;
     }
     return true;
-}
-
-// ─── 辅助 ─────────────────────────────────────────────────────
-
-void PcanAdapter::setReadTimeout(int ms)
-{
-    m_readTimeoutMs = ms;
 }
 
 QString PcanAdapter::channelName(int channel)

@@ -6,18 +6,17 @@
 #include <QString>
 #include <QList>
 
-/// CAN 设备信息
 struct CanDeviceInfo {
-    QString name;        // 显示名称
-    QString description; // 详细描述
-    int channel = -1;    // 通道号 (编码: 高字节=设备信息, 低字节=通道)
-    int adapterType = 0; // 适配器类型: 0=PCAN, 1=gs_usb, 2=SocketCAN, 3=ZCANFD, 4=ZCAN
-    int deviceType = 0;  // 设备类型代码 (ZCAN: VCI_USBCAN2等)
-    int deviceIndex = 0; // 设备索引号
-    int channelCount = 1;// 设备通道总数
+    QString name;
+    QString description;
+    int channel = -1;    // 高字节=设备索引, 低字节=通道号 (PCAN 例外: 16 位硬件 handle)
+    int adapterType = 0; // CanAdapterType 的整数值
+    int deviceType = 0;  // 厂商 SDK 的设备类型代码
+    int deviceIndex = 0;
+    int channelCount = 1;
 };
 
-/// 适配器类型
+/// 数值被持久化为 int，新增项只能追加在 MockCan 之前
 enum class CanAdapterType {
     PCAN = 0,
     GsUsb,
@@ -25,11 +24,11 @@ enum class CanAdapterType {
     ZCANFD,
     ZCAN,
 #ifdef QT_DEBUG
-    MockCan    // 虚拟适配器，仅 Debug 模式
+    MockCan
 #endif
 };
 
-/// 波特率预设
+/// 数值即 PCANBasic 的 BTR0BTR1 编码
 enum class CanBaudRate {
     BR_1M   = 0x0014,
     BR_800K = 0x0016,
@@ -43,7 +42,6 @@ enum class CanBaudRate {
     BR_5K   = 0x7F7F
 };
 
-/// 波特率转字符串
 inline QString baudRateString(CanBaudRate br) {
     switch (br) {
     case CanBaudRate::BR_1M:   return "1M";
@@ -60,7 +58,6 @@ inline QString baudRateString(CanBaudRate br) {
     }
 }
 
-/// 字符串转波特率
 inline CanBaudRate baudRateFromString(const QString &str) {
     if (str == "1M")    return CanBaudRate::BR_1M;
     if (str == "800K")  return CanBaudRate::BR_800K;
@@ -75,7 +72,7 @@ inline CanBaudRate baudRateFromString(const QString &str) {
     return CanBaudRate::BR_500K;
 }
 
-/// CAN 接口抽象基类 —— 所有 CAN 适配器必须实现此接口
+/// CAN 适配器抽象基类。所有实现运行在 GUI 线程，无需考虑并发。
 class CanInterface : public QObject
 {
     Q_OBJECT
@@ -84,41 +81,22 @@ public:
     explicit CanInterface(QObject *parent = nullptr) : QObject(parent) {}
     ~CanInterface() override = default;
 
-    /// 扫描可用设备
     virtual QList<CanDeviceInfo> scanDevices() = 0;
-
-    /// 打开指定通道
     virtual bool open(int channel, CanBaudRate baud = CanBaudRate::BR_500K) = 0;
-
-    /// 关闭当前通道
     virtual void close() = 0;
-
-    /// 是否已打开
     virtual bool isOpen() const = 0;
-
-    /// 发送一条 CAN 消息 (error 返回 false)
     virtual bool sendMessage(const CanMessage &msg) = 0;
-
-    /// 适配器类型名称
     virtual QString adapterName() const = 0;
 
-    /// 检查当前连接是否存活 (true=正常, false=已断开)
+    /// 覆写以做真实硬件探测；默认只反映 open/close 状态，无法发现物理拔出
     virtual bool isAlive() const { return isOpen(); }
 
-    /// 获取可用的发送通道列表 (多通道设备支持)
     virtual QList<int> availableSendChannels() const { return {}; }
-
-    /// 设置当前发送通道 (多通道设备支持, 返回是否成功)
     virtual bool setSendChannel(int channel) { Q_UNUSED(channel); return false; }
-
-    /// 获取当前发送通道
     virtual int currentSendChannel() const { return -1; }
 
 signals:
-    /// 收到 CAN 消息
     void messageReceived(const CanMessage &msg);
-
-    /// 错误发生
     void errorOccurred(const QString &error);
 };
 

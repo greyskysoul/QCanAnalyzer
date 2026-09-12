@@ -3,7 +3,6 @@
 #include <QSocketNotifier>
 #include <QDateTime>
 #include <QDir>
-#include <QMessageBox>
 
 #ifdef Q_OS_LINUX
 #include <sys/socket.h>
@@ -14,11 +13,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
-
-// CAN_FD_FLAG 在较老的 kernel headers (< 4.11) 中未定义
-#ifndef CAN_FD_FLAG
-#define CAN_FD_FLAG 0x00008000U
-#endif
 #endif
 
 SocketCanAdapter::SocketCanAdapter(QObject *parent)
@@ -36,13 +30,14 @@ void SocketCanAdapter::readSocket()
 #ifdef Q_OS_LINUX
     if (m_socketFd < 0) return;
 
-    struct can_frame frame;
-    // 限制单次读取帧数，避免在高负载下长时间占用事件循环
+    // canfd_frame 同时覆盖经典帧与 FD 帧，由 read() 返回的字节数区分
+    struct canfd_frame frame;
+    // 限流：避免高负载下长时间占用事件循环
     for (int i = 0; i < 64; ++i) {
         ssize_t n = ::read(m_socketFd, &frame, sizeof(frame));
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
-                break; // 没有更多数据
+                break;
             emit errorOccurred(QString("SocketCAN: 读取错误 (%1)").arg(strerror(errno)));
             break;
         }
@@ -51,11 +46,12 @@ void SocketCanAdapter::readSocket()
             break;
         }
 
+        const bool isFd = (n == CANFD_MTU);
         CanMessage msg;
         msg.direction = CanDirection::Rx;
         msg.channel = 0;
         msg.timestamp = QDateTime::currentDateTime();
-        msg.isFd = (n == CANFD_MTU);
+        msg.isFd = isFd;
 
         if (frame.can_id & CAN_EFF_FLAG) {
             msg.type = CanFrameType::ExtendedData;
@@ -64,16 +60,17 @@ void SocketCanAdapter::readSocket()
             msg.type = CanFrameType::StandardData;
             msg.id = frame.can_id & CAN_SFF_MASK;
         }
-
         if (frame.can_id & CAN_RTR_FLAG)
             msg.type = CanFrameType::Remote;
         if (frame.can_id & CAN_ERR_FLAG)
             msg.type = CanFrameType::Error;
 
-        msg.dlc = frame.can_dlc & 0x0F; // CAN FD DLC 编码取低4位
-        int dataLen = msg.isFd ? canFdDlcToLen(msg.dlc) : (msg.dlc > 8 ? 8 : msg.dlc);
-        for (int i = 0; i < dataLen && i < 64; ++i)
-            msg.data[i] = frame.data[i];
+        // FD 帧的 len 是 DLC 编码，经典帧的 can_dlc 是字节数
+        const uint8_t dlc = frame.len & 0x0F;
+        msg.dlc = isFd ? static_cast<uint8_t>(canFdDlcToLen(dlc))
+                       : (dlc > 8 ? 8 : dlc);
+        for (int j = 0; j < msg.dlc && j < 64; ++j)
+            msg.data[j] = frame.data[j];
 
         emit messageReceived(msg);
     }
@@ -83,43 +80,36 @@ void SocketCanAdapter::readSocket()
 QList<CanDeviceInfo> SocketCanAdapter::scanDevices()
 {
     QList<CanDeviceInfo> devices;
-#ifndef Q_OS_LINUX
-    Q_UNUSED(this);
-    return devices;
-#else
-    // 扫描 /sys/class/net/ 下所有 can* 网络接口
+#ifdef Q_OS_LINUX
     QDir netDir("/sys/class/net");
-    QStringList filters;
-    filters << "can*" << "vcan*";
+    const QStringList filters = {"can*", "vcan*"};
     for (const auto &ifName : netDir.entryList(filters, QDir::Dirs | QDir::NoDotAndDotDot)) {
         CanDeviceInfo info;
         info.name = ifName;
-        info.channel = 0; // SocketCAN 用接口名作为通道
+        info.channel = devices.size(); // channel 即接口在列表中的下标
         info.adapterType = static_cast<int>(CanAdapterType::SocketCAN);
         info.description = QString("SocketCAN: %1").arg(ifName);
         devices.append(info);
     }
-    return devices;
 #endif
+    return devices;
 }
 
 bool SocketCanAdapter::open(const QString &ifName)
 {
-    Q_UNUSED(ifName);
 #ifndef Q_OS_LINUX
+    Q_UNUSED(ifName);
     emit errorOccurred("SocketCAN 仅支持 Linux");
     return false;
 #else
     if (m_opened) close();
 
-    // 创建 CAN_RAW socket
     int sock = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (sock < 0) {
         emit errorOccurred(QString("SocketCAN: 创建 socket 失败 (%1)").arg(strerror(errno)));
         return false;
     }
 
-    // 绑定到指定接口
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, ifName.toLatin1().constData(), IFNAMSIZ - 1);
@@ -141,15 +131,13 @@ bool SocketCanAdapter::open(const QString &ifName)
     }
 
     m_socketFd = sock;
-    m_ifName = ifName;
     m_opened = true;
 
-    // 设置非阻塞模式，避免 readSocket() 阻塞事件循环
+    // 非阻塞，避免 readSocket() 阻塞事件循环
     int flags = ::fcntl(sock, F_GETFL, 0);
     if (flags >= 0)
         ::fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    // 使用 QSocketNotifier 异步监听 CAN 帧
     m_notifier = new QSocketNotifier(sock, QSocketNotifier::Read, this);
     connect(m_notifier, &QSocketNotifier::activated, this, &SocketCanAdapter::readSocket);
 
@@ -159,26 +147,25 @@ bool SocketCanAdapter::open(const QString &ifName)
 
 bool SocketCanAdapter::open(int channel, CanBaudRate baud)
 {
-    Q_UNUSED(channel);
     Q_UNUSED(baud);
 
 #ifndef Q_OS_LINUX
+    Q_UNUSED(channel);
     emit errorOccurred("SocketCAN 仅支持 Linux");
     return false;
 #else
-    // 从扫描结果中获取接口名 (channel 参数在此设计中不直接使用)
-    // 默认尝试 "can0"
-    QList<CanDeviceInfo> devices = scanDevices();
-    if (!devices.isEmpty())
-        return open(devices.first().name);
-    return open(QString("can0"));
+    // channel 是 scanDevices() 返回列表中的下标
+    const QList<CanDeviceInfo> devices = scanDevices();
+    if (channel >= 0 && channel < devices.size())
+        return open(devices[channel].name);
+    return devices.isEmpty() ? false : open(devices.first().name);
 #endif
 }
 
 void SocketCanAdapter::close()
 {
 #ifdef Q_OS_LINUX
-    // 先删除 notifier（必须在 close fd 之前）
+    // notifier 必须在关闭 fd 之前销毁
     if (m_notifier) {
         m_notifier->setEnabled(false);
         delete m_notifier;
@@ -205,6 +192,22 @@ bool SocketCanAdapter::sendMessage(const CanMessage &msg)
 #else
     if (m_socketFd < 0) return false;
 
+    if (msg.isFd) {
+        struct canfd_frame frame;
+        memset(&frame, 0, sizeof(frame));
+        frame.can_id = msg.id;
+        if (msg.type == CanFrameType::ExtendedData)
+            frame.can_id |= CAN_EFF_FLAG;
+        if (msg.type == CanFrameType::Remote)
+            frame.can_id |= CAN_RTR_FLAG;
+        frame.len = canFdLenToDlc(msg.dlc);
+        const int copyLen = canFdSnapLen(msg.dlc);
+        for (int i = 0; i < copyLen; ++i)
+            frame.data[i] = msg.data[i];
+
+        return ::write(m_socketFd, &frame, sizeof(frame)) == (ssize_t)sizeof(frame);
+    }
+
     struct can_frame frame;
     memset(&frame, 0, sizeof(frame));
     frame.can_id = msg.id;
@@ -212,15 +215,11 @@ bool SocketCanAdapter::sendMessage(const CanMessage &msg)
         frame.can_id |= CAN_EFF_FLAG;
     if (msg.type == CanFrameType::Remote)
         frame.can_id |= CAN_RTR_FLAG;
-    if (msg.isFd)
-        frame.can_id |= CAN_FD_FLAG;
-    frame.can_dlc = msg.dlc;
-    int copyLen = msg.isFd ? qMin((int)msg.dlc, 64) : qMin((int)msg.dlc, 8);
-    for (int i = 0; i < copyLen; ++i)
+    frame.can_dlc = msg.dlc > 8 ? 8 : msg.dlc;
+    for (int i = 0; i < frame.can_dlc; ++i)
         frame.data[i] = msg.data[i];
 
-    int nbytes = write(m_socketFd, &frame, sizeof(frame));
-    return nbytes == sizeof(frame);
+    return ::write(m_socketFd, &frame, sizeof(frame)) == (ssize_t)sizeof(frame);
 #endif
 }
 

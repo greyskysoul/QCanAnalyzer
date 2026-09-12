@@ -6,7 +6,6 @@
 #include <QList>
 #include <algorithm>
 
-// candle API 头文件
 extern "C" {
 #include <third_party/CandleApiDriver/api/candle.h>
 }
@@ -30,7 +29,6 @@ QList<CanDeviceInfo> GsUsbAdapter::scanDevices()
 {
     QList<CanDeviceInfo> devices;
 
-    // 使用 candle API 扫描
     candle_list_handle list = nullptr;
     if (!candle_list_scan(&list) || !list)
         return devices;
@@ -52,7 +50,7 @@ QList<CanDeviceInfo> GsUsbAdapter::scanDevices()
         // 每个通道作为一个设备
         for (uint8_t ch = 0; ch < numChannels; ++ch) {
             CanDeviceInfo info;
-            info.channel = (i << 8) | ch; // 编码: 高字节=设备号, 低字节=通道号
+            info.channel = (i << 8) | ch;
             info.adapterType = static_cast<int>(CanAdapterType::GsUsb);
             info.name = QString("candleLight #%1 CH%2").arg(i).arg(ch);
             info.description = QString("%1 [%2]").arg(info.name).arg(pathStr);
@@ -71,7 +69,6 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
 {
     if (m_opened) close();
 
-    // 使用 candle API 打开
     candle_list_handle list = nullptr;
     if (!candle_list_scan(&list) || !list) {
         emit errorOccurred("未找到 candleLight 设备");
@@ -103,10 +100,8 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
         return false;
     }
 
-    // ─── 波特率设置 ──────────────────────────────────────────
-    // 始终使用精确 bittiming 计算，而非 candle_channel_set_bitrate 的自动估算。
-    // 自动估算可能选择精度差的 brp/tq 组合，导致位时序偏差累积，
-    // 在直连场景（如 PCAN<->candleLight）中引发 Bus-Off。
+    // 不用 candle_channel_set_bitrate 的自动估算: 它可能选出精度差的 brp/tq 组合，
+    // 位时序偏差在直连场景 (如 PCAN <-> candleLight) 下会累积并引发 Bus-Off。
     uint32_t bitrate = 500000;
     switch (baud) {
     case CanBaudRate::BR_1M:   bitrate = 1000000; break;
@@ -122,7 +117,6 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
     default: break;
     }
 
-    // 获取设备 CAN 时钟能力
     candle_capability_t caps;
     if (!candle_channel_get_capabilities(hdev, ch, &caps)) {
         candle_dev_free(hdev);
@@ -131,7 +125,7 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
         return false;
     }
 
-    // 两阶段搜索：先找精度最优（实际比特率偏差最小），再从中选采样点最佳
+    // 按 比特率误差 > 采样点接近 80% > tq 总数 的优先级筛选候选
     struct BittimingCandidate {
         candle_bittiming_t timing;
         uint32_t tq_total;
@@ -145,9 +139,8 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
 
     for (uint32_t brp = caps.brp_min; brp <= caps.brp_max; brp += caps.brp_inc) {
         if (brp == 0) continue;
-        // 用浮点计算 tq_total 避免截断误差累积
         double tq_total_f = static_cast<double>(caps.fclk_can) / (brp * bitrate);
-        uint32_t tq_total = static_cast<uint32_t>(tq_total_f + 0.5); // 四舍五入
+        uint32_t tq_total = static_cast<uint32_t>(tq_total_f + 0.5);
         if (tq_total < 4 || tq_total > 25) continue;
 
         // 验证实际比特率偏差
@@ -160,7 +153,6 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
             uint32_t tseg1 = tq_total - 1 - tseg2;
             if (tseg1 < caps.tseg1_min || tseg1 > caps.tseg1_max) continue;
 
-            // 采样点 = (1 + tseg1) / tq_total, 放宽范围到 68%~87.5%
             uint32_t sp = (1 + tseg1) * 1000 / tq_total;
             if (sp < 680 || sp > 875) continue;
 
@@ -186,7 +178,7 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
         return false;
     }
 
-    // 排序策略：优先级 = 比特率误差最低 > 采样点最接近 80% > tq_total 更大（更精细）
+    // 优先级: 比特率误差最小 > 采样点最接近 80% > tq 总数更大
     std::sort(candidates.begin(), candidates.end(),
         [](const BittimingCandidate &a, const BittimingCandidate &b) {
             if (a.bitrate_err != b.bitrate_err)
@@ -207,9 +199,9 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
         emit errorOccurred(QString("gs_usb: 设置 bittiming 失败 (err=%1)").arg(static_cast<int>(err2)));
         return false;
     }
-    // 普通模式启动 CAN 通道（需要总线至少两个节点才能正常 ACK）
-    uint32_t flags = 0;
-    if (!candle_channel_start(hdev, ch, flags)) {
+
+    // 普通模式启动 (总线上至少需要另一个节点才能成功 ACK)
+    if (!candle_channel_start(hdev, ch, 0)) {
         candle_err_t err = candle_dev_last_error(hdev);
         candle_dev_free(hdev);
         candle_list_free(list);
@@ -219,12 +211,10 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
 
     m_devHandle = hdev;
     m_devList = list;
-    m_channelCount = 1;
     m_channelIndex = ch;
     m_opened = true;
     m_deviceLost = false;
 
-    // 读取定时器 — 先停止并删除旧的，再创建新的
     if (m_readTimer) {
         m_readTimer->stop();
         delete m_readTimer;
@@ -232,7 +222,7 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
     }
     m_readTimer = new QTimer(this);
     connect(m_readTimer, &QTimer::timeout, this, &GsUsbAdapter::onReadTimer);
-    // 轮询间隔从 1ms 放宽至 2ms，降低 USB 端点拥塞风险
+    // 2ms 而非 1ms：降低 USB 端点拥塞风险
     m_readTimer->start(2);
 
     m_errorFrameCount = 0;
@@ -244,17 +234,14 @@ bool GsUsbAdapter::open(int channel, CanBaudRate baud)
 
 void GsUsbAdapter::close()
 {
-    // 先停止读取定时器
-    if (m_readTimer) {
+    if (m_readTimer)
         m_readTimer->stop();
-    }
 
     m_recovering = false;
     m_errorFrameCount = 0;
     m_recoverAttempt = 0;
 
     if (m_devHandle) {
-        // 先停止通道再关闭设备
         candle_channel_stop(static_cast<candle_handle>(m_devHandle), m_channelIndex);
         candle_dev_close(static_cast<candle_handle>(m_devHandle));
         candle_dev_free(static_cast<candle_handle>(m_devHandle));
@@ -283,9 +270,9 @@ bool GsUsbAdapter::sendMessage(const CanMessage &msg)
         frame.can_id |= CANDLE_ID_EXTENDED;
     else if (msg.type == CanFrameType::Remote)
         frame.can_id |= CANDLE_ID_RTR;
-    frame.can_dlc = msg.dlc;
-    int copyLen = msg.isFd ? qMin((int)msg.dlc, 64) : qMin((int)msg.dlc, 8);
-    for (int i = 0; i < copyLen; ++i)
+    // candle/gs_usb 的 can_dlc 是 DLC 编码，而 CanMessage::dlc 是字节数
+    frame.can_dlc = canFdLenToDlc(msg.dlc);
+    for (int i = 0; i < msg.dlc && i < 64; ++i)
         frame.data[i] = msg.data[i];
 
     bool ret = candle_frame_send(static_cast<candle_handle>(m_devHandle),
@@ -297,9 +284,7 @@ bool GsUsbAdapter::sendMessage(const CanMessage &msg)
     return ret;
 }
 
-// ═══════════════════════════════════════════════════════════════
 // 接收轮询 & 错误恢复
-// ═══════════════════════════════════════════════════════════════
 
 void GsUsbAdapter::onReadTimer()
 {
@@ -314,50 +299,40 @@ void GsUsbAdapter::onReadTimer()
         candle_frametype_t ftype = candle_frame_type(&frame);
 
         if (ftype == CANDLE_FRAMETYPE_RECEIVE) {
-            // 收到正常数据帧 -> 重置错误计数器
-            if (m_errorFrameCount > 0) {
-                m_errorFrameCount = 0;
-            }
+            m_errorFrameCount = 0;
 
             CanMessage msg;
             msg.id = candle_frame_id(&frame);
+            // DLC 编码 > 8 即为 CAN FD 帧
             uint8_t rawDlc = candle_frame_dlc(&frame);
-            msg.dlc = rawDlc;
-            msg.isFd = (rawDlc > 8); // gs_usb: DLC > 8 视为 FD 帧
+            msg.isFd = (rawDlc > 8);
+            msg.dlc = static_cast<uint8_t>(canFdDlcToLen(rawDlc));
             msg.direction = CanDirection::Rx;
             msg.channel = m_channelIndex;
             msg.timestamp = QDateTime::currentDateTime();
             msg.type = candle_frame_is_extended_id(&frame)
                 ? CanFrameType::ExtendedData : CanFrameType::StandardData;
 
-            // 检测 RTR
             if (candle_frame_is_rtr(&frame))
                 msg.type = CanFrameType::Remote;
 
-            int dataLen = msg.isFd ? canFdDlcToLen(rawDlc) : (rawDlc > 8 ? 8 : rawDlc);
             uint8_t *data = candle_frame_data(&frame);
-            for (int i = 0; i < dataLen && i < 64; ++i)
+            for (int i = 0; i < msg.dlc && i < 64; ++i)
                 msg.data[i] = data[i];
 
             emit messageReceived(msg);
         } else if (ftype == CANDLE_FRAMETYPE_ERROR) {
-            // 错误帧: CAN 控制器报告总线错误
             m_errorFrameCount++;
-
-            // 错误帧连续超过阈值 -> 可能是 Bus-Off，尝试恢复
             if (m_errorFrameCount >= m_maxErrorBeforeRecover) {
                 qWarning() << "gs_usb:" << m_errorFrameCount
                            << "consecutive error frames, attempting channel recovery...";
                 recoverChannel();
             }
-        } else if (ftype == CANDLE_FRAMETYPE_TIMESTAMP_OVFL) {
-            // 时间戳溢出，忽略
         }
-        // CANDLE_FRAMETYPE_ECHO / UNKNOWN 忽略
+        // CANDLE_FRAMETYPE_TIMESTAMP_OVFL / ECHO / UNKNOWN 忽略
     }
 
-    // 如果本轮没读到任何帧（可能固件 FIFO 已空但通道仍在运行），
-    // 且之前累积了大量错误帧 -> 通道可能已静默停止
+    // 长时间收不到帧且错误计数未清零，通道可能已静默停止
     if (!gotAnyFrame && m_errorFrameCount >= m_maxErrorBeforeRecover) {
         qWarning() << "gs_usb: no frames received with" << m_errorFrameCount
                    << "pending errors, attempting channel recovery...";
@@ -383,32 +358,29 @@ void GsUsbAdapter::recoverChannel()
 
     candle_handle dev = static_cast<candle_handle>(m_devHandle);
     uint8_t ch = m_channelIndex;
+    const int attempt = m_recoverAttempt;
 
-    // Step 1: 停止通道
     if (!candle_channel_stop(dev, ch)) {
         candle_err_t err = candle_dev_last_error(dev);
         qWarning() << "gs_usb: candle_channel_stop failed, err=" << static_cast<int>(err);
     }
 
-    // Step 2: 短暂等待固件处理
+    // 给固件留出处理时间
     QThread::msleep(10);
 
-    // Step 3: 重新启动通道（使用相同标志）
     if (!candle_channel_start(dev, ch, 0)) {
         candle_err_t err = candle_dev_last_error(dev);
         qWarning() << "gs_usb: candle_channel_start failed, err=" << static_cast<int>(err);
         m_recovering = false;
-        // 立即重试
         QTimer::singleShot(100, this, &GsUsbAdapter::recoverChannel);
         return;
     }
 
     m_errorFrameCount = 0;
     m_recovering = false;
-    // 恢复成功后重置尝试计数（下次如果再出错仍有完整重试额度）
-    m_recoverAttempt = 0;
+    m_recoverAttempt = 0; // 恢复成功后复位，下次出错仍有完整重试额度
 
-    emit errorOccurred(QString("gs_usb: 通道已自动恢复 (第 %1 次)").arg(m_recoverAttempt));
+    emit errorOccurred(QString("gs_usb: 通道已自动恢复 (第 %1 次)").arg(attempt));
 }
 
 bool GsUsbAdapter::isAlive() const
@@ -416,7 +388,6 @@ bool GsUsbAdapter::isAlive() const
     if (!m_opened || !m_devHandle) return false;
     if (m_deviceLost) return false;
 
-    // 通过尝试获取设备时间戳来检测设备是否存活
     // 设备拔出时 candle_dev_get_timestamp_us 会失败
     uint32_t ts = 0;
     if (!candle_dev_get_timestamp_us(static_cast<candle_handle>(m_devHandle), &ts)) {

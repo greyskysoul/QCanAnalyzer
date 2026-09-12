@@ -9,6 +9,7 @@
 
 > 基于 Qt + qt-advanced-docking-system 的跨平台 CAN / CAN-FD 总线调试分析工具。
 > 支持 **PCAN、gs_usb (candleLight)、ZCANFD (ZLG USBCANFD)、ZCAN (ZLG USBCAN)、SocketCAN、MockCAN** 六大适配器。
+> 仅支持 Windows / Linux（MinGW 或 GCC）；无硬件时可用 Debug 构建的 MockCAN 测试。
 
 > ⚠️ **AI 声明**: 本项目 100% 由 GitHub Copilot (DeepSeek V4 Pro) 在 VS Code 中生成，包括但不限于：工程结构设计、多适配器架构、Qt Advanced Docking System 集成、所有 UI 布局与样式、CAN 报文收发逻辑。人工仅负责提出需求和编译验证。
 
@@ -86,18 +87,25 @@ sudo ip link set up vcan0
 
 ### 环境要求
 
-- **Qt 5.14+** (推荐 MinGW 64-bit / GCC)
+- **Qt 5.15+** (推荐 MinGW 64-bit / GCC)
 - **Windows** 或 **Linux**
 - Git + Git LFS
 
 ### 步骤
 
 ```bash
-# 1. 克隆 ADS 库
+# 1. 克隆依赖库 (libs/ 不入库，必须手动准备)
 mkdir -p libs && cd libs
-git clone https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git
+git clone --depth 1 --branch 4.5.0 https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git
+git clone --depth 1 https://github.com/Simsys/qhexedit2.git
 # 国内镜像: git clone https://gitee.com/czyt1988/Qt-Advanced-Docking-System.git
 cd ..
+```
+
+```bash
+# 2. 拉取 LFS 资源，并补齐 ADS 缺失的版本头文件 (qmake 构建必需)
+git lfs pull
+cp ci/ads_version.h libs/Qt-Advanced-Docking-System/src/ads_version.h
 ```
 
 **所有设备的 DLL / .a 文件已通过 Git LFS 存放在 `third_party/` 下**，克隆后请确保 LFS 文件已拉取：
@@ -144,11 +152,11 @@ sudo modprobe can; sudo modprobe can_raw  # SocketCAN
 ```
 
 ```bash
-# 3. 用 Qt Creator 打开 QCanAnalyzer.pro → 构建
-#    或命令行:
-qmake QCanAnalyzer.pro
-make   # Linux
-mingw32-make  # Windows MinGW
+# 3. 构建 (详见 BUILD.md)
+mkdir -p build && cd build
+qmake "CONFIG+=release" ../QCanAnalyzer.pro
+make -j$(nproc)   # Linux
+mingw32-make -j   # Windows MinGW
 ```
 
 > 也可以直接使用仓库内的 GitHub Actions 工作流在云端自动构建（见 [.github/workflows/build.yml](.github/workflows/build.yml)）。
@@ -171,9 +179,9 @@ QCanAnalyzer/
 │   ├── zcanfdadapter.h/.cpp   # ZCANFD 适配器 (ZLG USBCANFD, CAN FD)
 │   ├── zcanadapter.h/.cpp     # ZCAN 适配器 (ZLG USBCAN, 仅标准 CAN)
 │   ├── socketcanadapter.h/.cpp # SocketCAN 适配器 (Linux, QSocketNotifier)
-│   ├── mockcanadapter.h/.cpp  # MockCAN 虚拟适配器 (Debug 模式, 随机报文模拟)
-│   └── CandleApiDriver/       # candle API 静态库驱动
+│   ├── mockcanadapter.h/.cpp  # MockCAN 虚拟适配器 (仅 Debug 编译, 随机报文模拟)
 ├── third_party/
+│   ├── CandleApiDriver/       # candle API (编译进可执行文件)
 │   ├── pcan/PCANBasic.dll     # PCAN Basic API (Git LFS)
 │   ├── zcanfd/                # ZCANFD SDK (Git LFS)
 │   └── zcan/                  # ZCAN (VCI) SDK (Git LFS)
@@ -204,7 +212,7 @@ public:
 };
 ```
 
-然后在 `CanSessionWidget` 中注册该适配器即可。详见 [BUILD.md](BUILD.md) 的「扩展其他 CAN 设备」章节。
+然后在 `CanSessionWidget` 中注册该适配器即可。完整接入需要改动 **6 处**（新增适配器文件、`CanAdapterType` 枚举、`.pro` 源文件列表、`SessionConfigDialog` 下拉框与扫描分支、`CanSessionWidget` 成员与 `connectDevice()` 分支、`CanManager` 标签名分支），清单见 [AGENTS.md](AGENTS.md)。
 
 ## 许可证
 

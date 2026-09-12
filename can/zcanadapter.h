@@ -31,8 +31,6 @@ public:
 private:
     void onReadTimer();
     void pollMessages();
-    unsigned int timing0ForBaud(CanBaudRate baud) const;
-    unsigned int timing1ForBaud(CanBaudRate baud) const;
 
     unsigned long m_deviceType = 4;   // VCI_USBCAN2
     unsigned long m_deviceIndex = 0;
@@ -40,17 +38,13 @@ private:
     int           m_totalChannels = 1;
     bool          m_opened = false;
 
-    struct ChannelInfo {
-        unsigned long chIdx = 0;
-        CanBaudRate baud = CanBaudRate::BR_500K;
-    };
-    QList<ChannelInfo> m_openChannels;
+    QList<unsigned long> m_openChannels;
 
     QTimer *m_readTimer = nullptr;
 
-    // 静态缓存: 引用计数, 所有设备关闭后才允许重新扫描
+    // VCI_FindUsbDevice2 会断开已打开的设备，故设备占用期间禁止重新扫描
     static int s_openCount;
-    static QSet<unsigned long> s_openDeviceIndices;  // 已打开的设备索引集合, 防止重复打开
+    static QSet<unsigned long> s_openDeviceIndices;
     static QList<CanDeviceInfo> s_cachedDevices;
 };
 

@@ -3,34 +3,21 @@
 
 #include <QString>
 #include <QDateTime>
+#include <QtGlobal>
 #include <cstdint>
 
-/// CAN 消息类型
-enum class CanFrameType {
-    StandardData,   // 标准数据帧
-    ExtendedData,   // 扩展数据帧
-    Remote,         // 远程帧
-    Error,          // 错误帧
-    Status          // 状态帧
-};
+enum class CanFrameType { StandardData, ExtendedData, Remote, Error, Status };
+enum class CanDirection { Rx, Tx };
 
-/// CAN 消息方向
-enum class CanDirection {
-    Rx,  // 接收
-    Tx   // 发送
-};
-
-/// 单条 CAN 消息
 struct CanMessage {
-    uint32_t id = 0;               // CAN ID
+    uint32_t id = 0;
     CanFrameType type = CanFrameType::StandardData;
     CanDirection direction = CanDirection::Rx;
-    uint8_t dlc = 0;               // 数据长度 (0~64, CAN FD 最大 64)
-    uint8_t data[64] = {};         // 数据 (CAN FD 支持 64 字节)
-    int channel = 0;               // 通道号（多通道设备区分用）
-    bool isFd = false;             // 是否为 CAN FD 帧
-    QDateTime timestamp;           // 时间戳
-    uint32_t cycleTimeUs = 0;      // 与上一条同ID消息的周期(微秒), 0=未知
+    uint8_t dlc = 0;               // 数据字节数 (0~64)；适配器需在收/发时与 SDK 的 DLC 编码互转
+    uint8_t data[64] = {};
+    int channel = 0;
+    bool isFd = false;
+    QDateTime timestamp;
 
     QString typeString() const {
         QString s;
@@ -61,19 +48,30 @@ struct CanMessage {
     }
 };
 
-/// CAN FD DLC 编码 → 实际字节数
-/// DLC  0~8  →  0~8
-/// DLC  9    → 12
-/// DLC 10    → 16
-/// DLC 11    → 20
-/// DLC 12    → 24
-/// DLC 13    → 32
-/// DLC 14    → 48
-/// DLC 15    → 64
+/// CAN FD DLC 编码 (0~15) → 实际字节数 (9~15 对应 12/16/20/24/32/48/64)
 inline int canFdDlcToLen(uint8_t dlc)
 {
     static const uint8_t map[] = {0,1,2,3,4,5,6,7,8,12,16,20,24,32,48,64};
     return (dlc < 16) ? map[dlc] : 64;
+}
+
+/// 实际字节数 → CAN FD DLC 编码，供需要提交 DLC 而非字节数的 API 使用
+inline uint8_t canFdLenToDlc(int len)
+{
+    if (len <= 8) return static_cast<uint8_t>(qMax(len, 0));
+    if (len <= 12) return 9;
+    if (len <= 16) return 10;
+    if (len <= 20) return 11;
+    if (len <= 24) return 12;
+    if (len <= 32) return 13;
+    if (len <= 48) return 14;
+    return 15;
+}
+
+/// 把任意长度对齐到 CAN FD 合法字节数 (0~8/12/16/20/24/32/48/64)
+inline int canFdSnapLen(int len)
+{
+    return canFdDlcToLen(canFdLenToDlc(len));
 }
 
 #endif // CANMESSAGE_H

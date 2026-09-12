@@ -29,21 +29,17 @@ CanManager::~CanManager()
 CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
                                             bool isCanFd, int adapterType,
                                             const QString &deviceName,
-                                            CanBaudRate dataBaud)
+                                            const QString &dataBaudText)
 {
-    Q_UNUSED(dataBaud)
-
     int id = m_nextSessionId++;
 
     auto *widget = new CanSessionWidget(id);
     widget->setCanFdEnabled(isCanFd);
-    // 同步波特率到标签页 UI
     widget->setBaudRateText(baudRateString(baud));
-    if (isCanFd)
-        widget->setDataBaudRateText(baudRateString(dataBaud));
+    if (isCanFd && !dataBaudText.isEmpty())
+        widget->setDataBaudRateText(dataBaudText);
     m_sessions[id] = widget;
 
-    // 标签名根据适配器类型
     QString devName;
     switch (static_cast<CanAdapterType>(adapterType)) {
 #ifndef Q_OS_LINUX
@@ -59,10 +55,8 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
 #endif
     default: devName = QString("CAN-%1").arg(channel);
     }
-    QString title = QString("%1").arg(devName);
 
-    // 创建停靠窗口
-    auto *dockWidget = new ads::CDockWidget(m_dockManager, title);
+    auto *dockWidget = new ads::CDockWidget(m_dockManager, devName);
     dockWidget->setWidget(widget);
     dockWidget->setFeature(ads::CDockWidget::DockWidgetClosable, true);
     dockWidget->setFeature(ads::CDockWidget::DockWidgetMovable, true);
@@ -70,23 +64,18 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
 
     m_dockWidgets[id] = dockWidget;
 
-    // ── 添加到同一标签组 ──
-    if (m_sessions.size() == 1) {
-        // 第一个会话: 正常添加
-        m_lastArea = m_dockManager->addDockWidget(
-            ads::CenterDockWidgetArea, dockWidget);
-    } else {
-        // 后续会话: 加入已有标签组
+    // 所有会话共用同一个标签组
+    if (m_sessions.size() == 1)
+        m_lastArea = m_dockManager->addDockWidget(ads::CenterDockWidgetArea, dockWidget);
+    else
         addToExistingTabGroup(dockWidget);
-    }
 
-    // 关闭时清理 (使用 closing 集合防止重复触发)
     connect(dockWidget, &ads::CDockWidget::closed, this, [this, id]() {
         if (!m_closingSessions.contains(id))
             closeSession(id);
     });
 
-    // 会话销毁时确保dock也被清理 (仅当 closeSession 未正常触发时作为兜底)
+    // 兜底：closeSession 未触发时（如父窗口直接析构）仍清理 dock
     connect(widget, &QObject::destroyed, this, [this, id]() {
         m_closingSessions.remove(id);
         if (m_dockWidgets.contains(id)) {
@@ -99,7 +88,6 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
         }
     });
 
-    // 自动连接设备
     widget->connectDevice(channel, baud, adapterType);
 
     emit sessionCreated(id);
@@ -114,33 +102,28 @@ void CanManager::addToExistingTabGroup(ads::CDockWidget *dockWidget)
         return;
     }
 
-    // 使用 m_lastArea 作为标签组目标区域
     m_dockManager->addDockWidgetTabToArea(dockWidget, m_lastArea);
 }
 
 bool CanManager::findValidArea()
 {
-    // 检查 m_lastArea 是否仍然有效
     if (!m_lastArea || !m_dockManager) return false;
 
     QList<ads::CDockAreaWidget*> areas = m_dockManager->openedDockAreas();
-    if (!areas.contains(m_lastArea)) {
-        // m_lastArea 已失效，尝试从现有 areas 中找一个
+    if (!areas.contains(m_lastArea))
         m_lastArea = areas.isEmpty() ? nullptr : areas.first();
-    }
     return m_lastArea != nullptr;
 }
 
 void CanManager::closeSession(int sessionId)
 {
-    // 防止重复关闭
     if (m_closingSessions.contains(sessionId)) return;
     m_closingSessions.insert(sessionId);
 
     if (m_sessions.contains(sessionId)) {
+        // 不调 disconnectDevice(): 会话可能由 dock 关闭触发销毁，此时 UI 状态不确定。
+        // 适配器由 CanSessionWidget 析构函数负责关闭。
         CanSessionWidget *w = m_sessions.take(sessionId);
-        // 不在此处调用 disconnectDevice(), 而是直接 deleteLater
-        // 因为 disconnectDevice() 访问 UI 控件，而 closeSession 可能由 dock 关闭触发
         w->deleteLater();
     }
 
