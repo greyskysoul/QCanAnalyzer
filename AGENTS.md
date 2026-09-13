@@ -40,7 +40,7 @@ MainWindow (QStackedWidget: 欢迎页 / CDockManager)
 - `can/caninterface.h` 是唯一的抽象点，子类必须实现 `scanDevices / open / close / isOpen / sendMessage / adapterName`；可选覆写 `isAlive / availableSendChannels / setSendChannel / currentSendChannel`。
 - 适配器只用两个信号上报：`messageReceived(CanMessage)` 与 `errorOccurred(QString)`。**没有异常、没有错误码约定**（仅 `sendMessage` 返回 `bool`）。
 - **`CanMessage::dlc` 一律是数据字节数**，而各厂商 SDK 的 DLC 字段往往是编码值（0~15）。收包用 `canFdDlcToLen()` 归一化成字节数，发包用 `canFdLenToDlc()` 转回编码；FD 帧的字节数只能是 0~8/12/16/20/24/32/48/64。
-- **波特率分仲裁域与数据域**：`open()` 的 `baud` 是仲裁域（`CanBaudRate`，值即 PCAN 编码），`dataBaud` 是数据域（`CanDataBaudRate`，值即 Hz）。`CanDataBaudRate::None` 表示经典 CAN，同时充当 CAN-FD 开关。只有 ZCANFD 与 gs_usb 会真正配置数据域；PCAN/ZCAN 是经典 CAN 适配器、SocketCAN 由内核按 `ip link` 配置，三者按设计忽略该参数。
+- **波特率分仲裁域与数据域**：`open()` 的 `baud` 是仲裁域（`CanBaudRate`，值即 PCAN 编码），`dataBaud` 是数据域（`CanDataBaudRate`，值即 Hz）。`CanDataBaudRate::None` 表示经典 CAN，同时充当 CAN-FD 开关。只有 ZCANFD 与 gs_usb 会真正配置数据域；MockCAN 用它决定是否产生 FD 长帧；PCAN/ZCAN 是经典 CAN 适配器、SocketCAN 由内核按 `ip link` 配置，三者按设计忽略该参数。
 - `CanSessionWidget` **不反向依赖** `CanManager`；适配器由它在 `connectDevice()` 中惰性 `new` 并缓存，切换类型时复用实例。
 - 收包全部在 GUI 线程：轮询用 `QTimer`（PCAN/ZCAN 1ms、gs_usb 2ms），只有 SocketCAN 用 `QSocketNotifier`。**没有接收线程、没有互斥锁**——不要假设存在后台线程，也不要在 GUI 线程引入阻塞调用（现存唯一例外是 `gsusbadapter.cpp` Bus-Off 恢复中的 `QThread::msleep(10)`）。
 - 断线检测：`CanSessionWidget` 用 500ms 定时器轮询 `isAlive()`。只有 gs_usb（设备时间戳）与 PCAN（`CAN_GetStatus`）真正探测硬件，ZCAN/ZCANFD/SocketCAN 是 `return m_opened`，拔线不会被发现。
