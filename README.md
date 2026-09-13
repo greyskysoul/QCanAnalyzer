@@ -1,11 +1,12 @@
 # QCanAnalyzer — CAN / CAN-FD 总线调试分析工具
 
-[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![release](https://img.shields.io/github/v/release/greyskysoul/QCanAnalyzer)](https://github.com/greyskysoul/QCanAnalyzer/releases)
+[![release](https://img.shields.io/github/v/release/greyskysoul/QCanAnalyzer?color=3498db)](https://github.com/greyskysoul/QCanAnalyzer/releases)
+[![downloads](https://img.shields.io/github/downloads/greyskysoul/QCanAnalyzer/total?color=2ecc71&label=downloads)](https://github.com/greyskysoul/QCanAnalyzer/releases)
 [![build](https://github.com/greyskysoul/QCanAnalyzer/actions/workflows/build.yml/badge.svg)](https://github.com/greyskysoul/QCanAnalyzer/actions/workflows/build.yml)
 [![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)](https://github.com/greyskysoul/QCanAnalyzer)
 [![language](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://github.com/greyskysoul/QCanAnalyzer)
 [![framework](https://img.shields.io/badge/Qt-5.15%2B-blue.svg)](https://www.qt.io)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 基于 Qt + qt-advanced-docking-system 的跨平台 CAN / CAN-FD 总线调试分析工具。
 > 支持 **PCAN、gs_usb (candleLight)、ZCANFD (ZLG USBCANFD)、ZCAN (ZLG USBCAN)、SocketCAN、MockCAN** 六大适配器。
@@ -15,8 +16,26 @@
 
 ---
 
+## 下载
+
+| 平台 | 文件 | 说明 |
+| ---- | ---- | ---- |
+| Windows x64 | `QCanAnalyzer-windows-x64.zip` | 免安装，解压后运行 `QCanAnalyzer.exe` |
+| Linux x86_64 | `QCanAnalyzer-*.AppImage` | `chmod +x` 后直接运行 |
+
+前往 [**Releases**](https://github.com/greyskysoul/QCanAnalyzer/releases/latest) 下载最新版 **v1.1.0**；历史版本见 [全部发布](https://github.com/greyskysoul/QCanAnalyzer/releases)。
+
+## 更新亮点 (v1.1.0)
+
+- 📡 **CAN-FD 数据域波特率真正生效** — `CanInterface::open()` 新增数据域参数并在创建会话时正确下发，仲裁域 / 数据域可分别配置
+- 🔢 **统一 CAN-FD DLC 语义** — `CanMessage::dlc` 全链路统一为数据字节数，修正长帧显示
+- 🧹 **清理编译警告与死代码**，精简注释
+- 📸 **文档更新** — 全部截图改用 Debug 版 **MockCAN** 生成，无硬件即可复现
+
 ## 目录
 
+- [下载](#下载)
+- [更新亮点 (v1.1.0)](#更新亮点-v110)
 - [功能特性](#功能特性)
 - [支持的设备](#支持的设备)
 - [截图](#截图)
@@ -68,15 +87,21 @@ sudo ip link set up vcan0
 
 ## 截图
 
-| 欢迎页 | CAN 会话 |
+| 欢迎页 | 新建会话 |
 | ------ | -------- |
-| ![欢迎页](pic/welcome.jpg) | ![CAN 会话](pic/session.jpg) |
+| ![欢迎页](pic/welcome.png) | ![新建会话](pic/session_config.png) |
 
-![数据发送](pic/data_send.jpg)
+| CAN 会话 (MockCAN) | CAN-FD 会话 |
+| ------------------ | ----------- |
+| ![CAN 会话](pic/session.png) | ![CAN-FD 会话](pic/session_fd.png) |
+
+![数据发送](pic/data_send.png)
+
+> 以上截图均由 Debug 构建的 **MockCAN 虚拟适配器**生成，无硬件即可复现。
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/greyskysoul/QCanAnalyzer/releases) 下载对应平台的压缩包并解压
+1. 从 [下载](#下载) 或 [Releases](https://github.com/greyskysoul/QCanAnalyzer/releases/latest) 获取对应平台的包并解压
 2. 运行 `QCanAnalyzer` (Linux) 或 `QCanAnalyzer.exe` (Windows)
 3. 在欢迎页点击 **新建会话**，选择设备 / 通道 / 波特率，即可开始收发
 4. 无硬件时可在 Debug 模式下使用 **MockCAN** 虚拟适配器测试

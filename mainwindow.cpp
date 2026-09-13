@@ -64,7 +64,7 @@ MainWindow::MainWindow(const QString &initialLang, QWidget *parent)
     setupMenuBar();
     setupStatusBar();
 
-    setWindowTitle(tr("QCanAnalyzer - CAN Bus Debug Tool"));
+    setWindowTitle(tr("QCanAnalyzer %1 - CAN Bus Debug Tool").arg(APP_VERSION));
     resize(1280, 800);
 
     showWelcomePage();
@@ -161,11 +161,11 @@ void MainWindow::setupMenuBar()
         QMessageBox about(this);
         about.setWindowTitle(tr("关于 QCanAnalyzer"));
         about.setIconPixmap(QPixmap(":/icon.png").scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        about.setText(tr("<h3>QCanAnalyzer v1.0</h3>"
+        about.setText(tr("<h3>QCanAnalyzer v%1</h3>"
             "<p>CAN 总线调试分析工具</p>"
             "<p>PCAN &middot; gs_usb (candleLight) &middot; ZCANFD &middot; ZCAN &middot; SocketCAN</p>"
             "<p>CAN-FD 支持 &middot; 多通道识别 &middot; 帧间隔发送 &middot; 多会话停靠</p>"
-            "<p style='color:gray;'>AI 生成项目 — GitHub Copilot (DeepSeek V4.1 Flash)</p>"));
+            "<p style='color:gray;'>AI 生成项目 — GitHub Copilot (DeepSeek V4.1 Flash)</p>").arg(APP_VERSION));
         about.exec();
     });
     helpMenu->addAction(aboutAct);
@@ -322,7 +322,7 @@ void MainWindow::switchLanguage(const QString &lang)
         if (!m_canManager->hasSessions())
             statusBar()->showMessage(m_statusReadyMsg);
 
-        setWindowTitle(tr("QCanAnalyzer - CAN Bus Debug Tool"));
+        setWindowTitle(tr("QCanAnalyzer %1 - CAN Bus Debug Tool").arg(APP_VERSION));
     });
 }
 

@@ -20,6 +20,7 @@
     </message>
     <message>
         <location filename="ui/cansessionwidget.ui" line="54"/>
+        <location filename="ui/cansessionwidget.cpp" line="822"/>
         <source>波特率:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -35,13 +36,13 @@
     </message>
     <message>
         <location filename="ui/cansessionwidget.ui" line="87"/>
-        <location filename="ui/cansessionwidget.cpp" line="394"/>
+        <location filename="ui/cansessionwidget.cpp" line="365"/>
         <source>连接</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="ui/cansessionwidget.ui" line="100"/>
-        <location filename="ui/cansessionwidget.cpp" line="391"/>
+        <location filename="ui/cansessionwidget.cpp" line="362"/>
         <source>未连接</source>
         <translation type="unfinished"></translation>
     </message>
@@ -188,8 +189,8 @@
     </message>
     <message>
         <location filename="ui/cansessionwidget.ui" line="446"/>
-        <location filename="ui/cansessionwidget.cpp" line="183"/>
-        <location filename="ui/cansessionwidget.cpp" line="610"/>
+        <location filename="ui/cansessionwidget.cpp" line="187"/>
+        <location filename="ui/cansessionwidget.cpp" line="545"/>
         <source> ms</source>
         <translation type="unfinished"></translation>
     </message>
@@ -200,79 +201,95 @@
     </message>
     <message>
         <location filename="ui/cansessionwidget.ui" line="512"/>
-        <location filename="ui/cansessionwidget.cpp" line="573"/>
+        <location filename="ui/cansessionwidget.cpp" line="509"/>
         <source>发送</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="76"/>
+        <location filename="ui/cansessionwidget.cpp" line="96"/>
         <source>⚠ %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="142"/>
-        <location filename="ui/cansessionwidget.cpp" line="603"/>
+        <location filename="ui/cansessionwidget.cpp" line="151"/>
+        <location filename="ui/cansessionwidget.cpp" line="539"/>
         <source>标准数据帧</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="143"/>
-        <location filename="ui/cansessionwidget.cpp" line="604"/>
+        <location filename="ui/cansessionwidget.cpp" line="152"/>
+        <location filename="ui/cansessionwidget.cpp" line="540"/>
         <source>扩展数据帧</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="144"/>
-        <location filename="ui/cansessionwidget.cpp" line="605"/>
+        <location filename="ui/cansessionwidget.cpp" line="153"/>
+        <location filename="ui/cansessionwidget.cpp" line="541"/>
         <source>远程帧</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="182"/>
-        <location filename="ui/cansessionwidget.cpp" line="609"/>
+        <location filename="ui/cansessionwidget.cpp" line="186"/>
+        <location filename="ui/cansessionwidget.cpp" line="544"/>
         <source>最快</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="270"/>
-        <location filename="ui/cansessionwidget.cpp" line="615"/>
+        <location filename="ui/cansessionwidget.cpp" line="265"/>
+        <location filename="ui/cansessionwidget.cpp" line="550"/>
         <source>SocketCAN (请用 ip link 命令设置波特率)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="327"/>
-        <location filename="ui/cansessionwidget.cpp" line="415"/>
+        <location filename="ui/cansessionwidget.cpp" line="317"/>
+        <location filename="ui/cansessionwidget.cpp" line="386"/>
         <source>CH%1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="359"/>
+        <location filename="ui/cansessionwidget.cpp" line="344"/>
         <source>⚠ 设备已断开</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="381"/>
+        <location filename="ui/cansessionwidget.cpp" line="353"/>
         <source>● 已连接</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="384"/>
+        <location filename="ui/cansessionwidget.cpp" line="356"/>
         <source>断开</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="417"/>
+        <location filename="ui/cansessionwidget.cpp" line="388"/>
         <source>通道 %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="558"/>
+        <location filename="ui/cansessionwidget.cpp" line="509"/>
         <source>停止</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/cansessionwidget.cpp" line="643"/>
+        <location filename="ui/cansessionwidget.cpp" line="558"/>
+        <location filename="ui/cansessionwidget.cpp" line="822"/>
+        <source>仲裁域:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="ui/cansessionwidget.cpp" line="579"/>
         <source>保存 CAN 报文</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="ui/cansessionwidget.cpp" line="591"/>
+        <source>时间,方向,ID,通道,类型,DLC,数据</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="ui/cansessionwidget.cpp" line="774"/>
+        <source>Rx: %1  |  Tx: %2</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -284,116 +301,117 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="135"/>
+        <location filename="mainwindow.cpp" line="67"/>
+        <location filename="mainwindow.cpp" line="325"/>
+        <source>QCanAnalyzer %1 - CAN Bus Debug Tool</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="mainwindow.cpp" line="115"/>
         <source>文件(&amp;F)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="137"/>
+        <location filename="mainwindow.cpp" line="117"/>
         <source>新建会话(&amp;N)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="142"/>
+        <location filename="mainwindow.cpp" line="122"/>
         <source>关闭所有会话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="148"/>
+        <location filename="mainwindow.cpp" line="128"/>
         <source>退出(&amp;X)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="154"/>
+        <location filename="mainwindow.cpp" line="133"/>
         <source>窗口(&amp;W)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="156"/>
+        <location filename="mainwindow.cpp" line="135"/>
         <source>水平平铺</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="193"/>
+        <location filename="mainwindow.cpp" line="139"/>
         <source>垂直平铺</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="228"/>
+        <location filename="mainwindow.cpp" line="145"/>
         <source>取消拆分</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="243"/>
+        <location filename="mainwindow.cpp" line="158"/>
         <source>帮助(&amp;H)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="244"/>
+        <location filename="mainwindow.cpp" line="159"/>
         <source>关于(&amp;A)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="247"/>
+        <location filename="mainwindow.cpp" line="162"/>
         <source>关于 QCanAnalyzer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="249"/>
-        <source>&lt;h3&gt;QCanAnalyzer v1.0&lt;/h3&gt;&lt;p&gt;CAN 总线调试分析工具&lt;/p&gt;&lt;p&gt;PCAN &amp;middot; gs_usb (candleLight) &amp;middot; ZCANFD &amp;middot; ZCAN &amp;middot; SocketCAN&lt;/p&gt;&lt;p&gt;CAN-FD 支持 &amp;middot; 多通道识别 &amp;middot; 帧间隔发送 &amp;middot; 多会话停靠&lt;/p&gt;&lt;p style=&apos;color:gray;&apos;&gt;AI 生成项目 — GitHub Copilot (DeepSeek V4.1 Flash)&lt;/p&gt;</source>
+        <location filename="mainwindow.cpp" line="164"/>
+        <source>&lt;h3&gt;QCanAnalyzer v%1&lt;/h3&gt;&lt;p&gt;CAN 总线调试分析工具&lt;/p&gt;&lt;p&gt;PCAN &amp;middot; gs_usb (candleLight) &amp;middot; ZCANFD &amp;middot; ZCAN &amp;middot; SocketCAN&lt;/p&gt;&lt;p&gt;CAN-FD 支持 &amp;middot; 多通道识别 &amp;middot; 帧间隔发送 &amp;middot; 多会话停靠&lt;/p&gt;&lt;p style=&apos;color:gray;&apos;&gt;AI 生成项目 — GitHub Copilot (DeepSeek V4.1 Flash)&lt;/p&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="259"/>
+        <location filename="mainwindow.cpp" line="173"/>
         <source>语言(&amp;L)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="268"/>
+        <location filename="mainwindow.cpp" line="182"/>
         <source>中文</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="273"/>
+        <location filename="mainwindow.cpp" line="187"/>
         <source>English</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="292"/>
-        <location filename="mainwindow.cpp" line="391"/>
+        <location filename="mainwindow.cpp" line="206"/>
+        <location filename="mainwindow.cpp" line="321"/>
         <source>就绪  —  按 Ctrl+N 新建 CAN 会话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="318"/>
+        <location filename="mainwindow.cpp" line="257"/>
         <source>已创建会话 — 当前共 %1 个会话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="mainwindow.cpp" line="326"/>
+        <location filename="mainwindow.cpp" line="265"/>
         <source>所有会话已关闭</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="mainwindow.cpp" line="396"/>
-        <source>QCanAnalyzer - CAN Bus Debug Tool</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
     <name>MockCanAdapter</name>
     <message>
-        <location filename="can/mockcanadapter.h" line="24"/>
+        <location filename="can/mockcanadapter.h" line="25"/>
         <source>MockCAN (虚拟)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="can/mockcanadapter.cpp" line="32"/>
+        <location filename="can/mockcanadapter.cpp" line="23"/>
         <source>MockCAN #%1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="can/mockcanadapter.cpp" line="33"/>
+        <location filename="can/mockcanadapter.cpp" line="24"/>
         <source>虚拟 CAN 通道 %1 (仅 Debug)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -450,7 +468,8 @@
     </message>
     <message>
         <location filename="ui/sessionconfigdialog.ui" line="97"/>
-        <location filename="ui/sessionconfigdialog.cpp" line="207"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="196"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="210"/>
         <source>波特率:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -465,76 +484,77 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="42"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="40"/>
         <source>MockCAN (虚拟调试)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="74"/>
-        <location filename="ui/sessionconfigdialog.cpp" line="218"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="66"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="206"/>
         <source>创建会话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="80"/>
-        <location filename="ui/sessionconfigdialog.cpp" line="219"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="72"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="207"/>
         <source>取消</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="88"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="80"/>
         <source>提示</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="88"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="80"/>
         <source>请选择有效的 CAN 设备</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="107"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="98"/>
         <source>点击「刷新」扫描设备</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="108"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="99"/>
         <source>请点击刷新按钮扫描设备</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="163"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="157"/>
         <source>未检测到设备</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="167"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="161"/>
         <source>⚠ 请使用 ip link 命令配置 CAN 接口波特率
    例: sudo ip link set can0 type can bitrate 500000</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="171"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="165"/>
         <source>⚠ 未检测到设备，请检查连接和驱动</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="174"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="168"/>
         <source>如已连接ZCAN设备, 请断开所有ZCAN会话后重新扫描</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="186"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="176"/>
         <source>✓ 检测到 %1 个设备</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="189"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="179"/>
         <source>已连接的ZCAN设备不会被重新扫描
 断开所有ZCAN会话后可获取最新设备列表</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="ui/sessionconfigdialog.cpp" line="204"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="193"/>
+        <location filename="ui/sessionconfigdialog.cpp" line="209"/>
         <source>仲裁域波特率:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -720,7 +740,7 @@
 <context>
     <name>ads::CDockManager</name>
     <message>
-        <location filename="libs/Qt-Advanced-Docking-System/src/DockManager.cpp" line="523"/>
+        <location filename="libs/Qt-Advanced-Docking-System/src/DockManager.cpp" line="519"/>
         <source>Show View</source>
         <translation type="unfinished"></translation>
     </message>

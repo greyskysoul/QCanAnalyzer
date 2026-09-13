@@ -8,6 +8,9 @@ DEFINES += QT_DEPRECATED_WARNINGS
 DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000
 DEFINES += ADS_STATIC
 
+VERSION = 1.1.0
+DEFINES += APP_VERSION=\\\"$$VERSION\\\"
+
 # ═══════════════════════════════════════════════════════════════
 # 程序图标 (Windows 需 .ico 格式)
 # ═══════════════════════════════════════════════════════════════
