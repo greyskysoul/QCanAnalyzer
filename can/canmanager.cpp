@@ -90,7 +90,8 @@ CanSessionWidget *CanManager::createSession(int channel, CanBaudRate baud,
         }
     });
 
-    widget->connectDevice(channel, baud, adapterType);
+    // 用 widget 归一化后的值（非 FD 时为 None），与会话内重连路径保持一致
+    widget->connectDevice(channel, baud, adapterType, widget->dataBaudRate());
 
     emit sessionCreated(id);
     return widget;
